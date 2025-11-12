@@ -63,7 +63,7 @@ export class FPSControls {
 
         this.euler.setFromQuaternion(this.camera.quaternion);
         this.euler.y -= movementX * this.lookSpeed;
-        this.euler.x -= movementY * this.lookSpeed;
+        this.euler.x += movementY * this.lookSpeed;
 
         
         this.euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.euler.x));
