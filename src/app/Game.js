@@ -57,10 +57,8 @@ export class Game {
     setupRenderer() {
         this.scene.background = new THREE.Color(0x000510);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        // Start above planet surface, looking toward horizon
-        this.camera.position.set(0, 155, 0);
-        // Look toward horizon (tangent to sphere)
-        this.camera.lookAt(0, 150, -150);
+        this.camera.position.set(0, 200, 0);
+        this.camera.lookAt(0, 0, 0);
     }
 
     setupOrbitalSystem() {
@@ -72,7 +70,7 @@ export class Game {
         const star = new CelestialBody({
             type: 'star',
             radius: this.starRadius,
-            position: { x: 0, y: 0, z: 0 },
+            position: { x: -1500, y: 0, z: 0 },
             rotationSpeed: 0
         });
 
@@ -103,7 +101,6 @@ export class Game {
     }
 
     async initialize() {
-        console.log('🚀 Starting initialization...');
 
         this.worldCache = new WorldCache();
         await this.worldCache.init();
@@ -117,7 +114,6 @@ export class Game {
         this.buildImpostor();
         this.beginSurfaceLoading();
 
-        console.log('✓ Initialization complete, loading surface chunks...');
     }
 
     async loadShaders() {
@@ -135,7 +131,6 @@ export class Game {
                 frag: './src/rendering/shaders/voxel.frag.glsl'
             }
         });
-        console.log('✓ Shaders loaded');
     }
 
     async loadOrGeneratePlanet() {
@@ -148,31 +143,42 @@ export class Game {
             z: this.camera.position.z
         };
 
-        
+        // Get all surface chunks and sort by distance from camera
         const allSurfaceChunks = planetGenerator.getSurfaceChunks(this.chunkSize, startCameraPos);
         const sortedChunks = allSurfaceChunks
             .map(coord => {
                 const { cx, cy, cz } = coord;
                 const chunkCenter = {
-                    x: cx * this.chunkSize,
-                    y: cy * this.chunkSize,
-                    z: cz * this.chunkSize
+                    x: cx * this.chunkSize + this.chunkSize / 2,
+                    y: cy * this.chunkSize + this.chunkSize / 2,
+                    z: cz * this.chunkSize + this.chunkSize / 2
                 };
                 const dist = Math.sqrt(
                     (chunkCenter.x - startCameraPos.x) ** 2 +
                     (chunkCenter.y - startCameraPos.y) ** 2 +
                     (chunkCenter.z - startCameraPos.z) ** 2
                 );
-                return { ...coord, dist };
+                return { cx, cy, cz, dist };
             })
             .sort((a, b) => a.dist - b.dist);
 
-        
+        // Take only the 9 closest chunks for initial load
         this.surfaceChunksToLoad = sortedChunks.slice(0, 9);
 
-        
         this.planetChunks = new Map();
-        console.log(`✓ Force-loading ${this.surfaceChunksToLoad.length} nearest chunks, rest will load in background...`);
+
+        // Pre-generate EXACTLY these 9 chunks
+        for (const coord of this.surfaceChunksToLoad) {
+            const { cx, cy, cz } = coord;
+            const key = ChunkCoordinate.toKey(cx, cy, cz);
+            const chunkData = planetGenerator.generateChunk(cx, cy, cz, this.chunkSize);
+            if (chunkData) {
+                this.planetChunks.set(key, chunkData);
+            }
+        }
+
+        console.log(`✓ Pre-generated ${this.planetChunks.size} chunks:`, this.surfaceChunksToLoad.map(c => `${c.cx},${c.cy},${c.cz}`).join(' '));
+
 
         this.chunkLoader = new ChunkLoader(this.chunkSize, 8);
         this.lodManager = new LODManager(300);
@@ -189,7 +195,6 @@ export class Game {
         this.starGenerator = starGenerator;
         this.starChunks = new Map();
         this.starSurfaceChunks = starGenerator.getSurfaceChunks(this.chunkSize);
-        console.log(`✓ Star setup complete, will generate ${this.starSurfaceChunks.length} surface chunks on-demand`);
     }
 
     createMaterials() {
@@ -222,7 +227,6 @@ export class Game {
         this.materials.voxel = MaterialFactory.createVoxelMaterial(this.shaders.voxel, starPosVec);
         this.materials.emissive = new THREE.MeshBasicMaterial({ vertexColors: true });
 
-        console.log('✓ Materials created');
     }
 
     buildImpostor() {
@@ -248,14 +252,12 @@ export class Game {
         this.starLodManager = new LODManager(400);
         this.loadedStarMeshes = new Map();
 
-        console.log('✓ Impostor meshes built (planet + star)');
     }
 
     beginSurfaceLoading() {
         if (this.loadingAnimation) {
             this.loadingAnimation.showPlanets();
         }
-        console.log(`✓ Beginning surface load: ${this.surfaceChunksToLoad.length} chunks`);
     }
 
     onLoadingComplete() {
@@ -282,22 +284,18 @@ export class Game {
                 this.planetContainer.add(mesh);
                 this.loadedMeshes.set(key, mesh);
             }
-            console.log(`✓ Added ${this.preloadedSurfaceMeshes.length} preloaded surface meshes to planet container`);
             this.preloadedSurfaceMeshes = null;
         }
 
         this.updateScene();
 
-        // Keep planet impostor visible - shader will cull where voxel chunks exist
     }
 
     loadStarVoxels() {
         if (!this.starChunks) {
-            console.warn('⚠ Star chunks not yet generated, skipping voxel load...');
             return;
         }
 
-        console.log(`✓ Star voxel generation ready: ${this.starChunks.size} chunks prepared for LOD`);
     }
 
     loadSurfaceChunks() {
@@ -307,10 +305,9 @@ export class Game {
         const { cx, cy, cz } = coord;
         const key = ChunkCoordinate.toKey(cx, cy, cz);
 
-        
         const chunkData = this.planetChunks.get(key);
         if (!chunkData) {
-            console.warn(`No chunk data for ${cx},${cy},${cz}`);
+            // Chunk not pre-generated (expected for on-demand chunks)
             this.loadedSurfaceChunks++;
             return;
         }
@@ -334,7 +331,6 @@ export class Game {
 
         this.loadedSurfaceChunks++;
         if (this.loadedSurfaceChunks % 100 === 0 || this.loadedSurfaceChunks === this.surfaceChunksToLoad.length) {
-            console.log(`✓ Surface loading: ${this.loadedSurfaceChunks}/${this.surfaceChunksToLoad.length} chunks (${Math.round(this.loadedSurfaceChunks / this.surfaceChunksToLoad.length * 100)}%)`);
         }
     }
 
@@ -545,7 +541,6 @@ export class Game {
             this.loadingAnimation.render();
 
             if (totalChunks > 0 && loadedChunks >= totalChunks) {
-                console.log('✓ Loading complete, transitioning to game...');
                 this.loadingAnimation.complete();
             }
         } else {
@@ -564,7 +559,6 @@ export class Game {
                 if (this.transitionProgress >= 1.0) {
                     this.transitionProgress = 1.0;
                     this.isTransitioning = false;
-                    console.log('✓ Transition complete, controls enabled');
                 }
             }
 
