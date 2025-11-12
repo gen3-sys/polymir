@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0-alpha
 **Status:** Architecture Complete, Implementation In Progress
-**License:** AGPL-3.0 (Copyleft - Free commercial use if derivative work is open-source)
+**License:** AGPL-3.0 (Copyleft - Free commercial use if derivative work is open-source & also Copyleft)
 **Target:** GitHub Pages + Cloudflare Workers
 
 ---
@@ -343,5 +343,6 @@ See LICENSE file for full details.
 **Last Updated:** 2025-11-11
 **Architecture Version:** 1.0.0
 **Implementation Status:** Foundation In Progress
-#   p o l y m i r  
+#   p o l y m i r 
+ 
  
