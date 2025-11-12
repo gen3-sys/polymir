@@ -1,0 +1,17 @@
+{
+  "name": "polymir-backend",
+  "version": "1.0.0-alpha",
+  "description": "Polymir Cloudflare Workers Backend",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

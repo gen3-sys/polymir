@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Underwater Caustics - Room Projection</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        input[type="range"] {
+            width: 150px;
+        }
+        .control {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="control">
+            <label>Caustic Intensity: <span id="intensityVal">1.2</span></label>
+            <input type="range" id="intensity" min="0.5" max="5" step="0.1" value="1.2">
+        </div>
+        <div class="control">
+            <label>Animation Speed: <span id="speedVal">0.5</span></label>
+            <input type="range" id="speed" min="0.1" max="2" step="0.1" value="0.5">
+        </div>
+        <div class="control">
+            <label>Wave Scale: <span id="scaleVal">0.300</span></label>
+            <input type="range" id="scale" min="0.1" max="0.5" step="0.01" value="0.3">
+        </div>
+        <div class="control">
+            <label>Chromatic: <span id="chromaticVal">0.015</span></label>
+            <input type="range" id="chromatic" min="0" max="0.05" step="0.001" value="0.015">
+        </div>
+    </div>
+    <canvas id="canvas"></canvas>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Three.js setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a2530);
+        
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ 
+            canvas: document.getElementById('canvas'),
+            antialias: true 
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        // Camera position - looking at corner from inside room
+        camera.position.set(3.5, 2.5, 3.5);
+        camera.lookAt(0, 1, 0);
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // Caustics shader - projects patterns onto surfaces
+        function createCausticMaterial() {
+            return new THREE.ShaderMaterial({
+                uniforms: {
+                    time: { value: 0 },
+                    intensity: { value: 1.2 },
+                    waveScale: { value: 0.3 },
+                    chromatic: { value: 0.015 }
+                },
+                vertexShader: `
+                    varying vec3 vWorldPosition;
+                    varying vec3 vNormal;
+                    
+                    void main() {
+                        vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                        vNormal = normalize(normalMatrix * normal);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    precision highp float;
+                    
+                    uniform float time;
+                    uniform mediump float intensity;
+                    uniform mediump float waveScale;
+                    uniform mediump float chromatic;
+                    
+                    varying vec3 vWorldPosition;
+                    varying vec3 vNormal;
+                    
+                    // Better hash function - no visible tiling
+                    vec3 hash3(vec2 p) {
+                        vec3 p3 = fract(vec3(p.xyx) * vec3(443.897, 441.423, 437.195));
+                        p3 += dot(p3, p3.yxz + 19.19);
+                        return fract((p3.xxy + p3.yxx) * p3.zyx);
+                    }
+                    
+                    // Improved noise without tiling
+                    float noise(vec2 p) {
+                        vec2 i = floor(p);
+                        vec2 f = fract(p);
+                        
+                        // Quintic interpolation for smoother results
+                        vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+                        
+                        vec2 ga = hash3(i + vec2(0.0, 0.0)).xy * 2.0 - 1.0;
+                        vec2 gb = hash3(i + vec2(1.0, 0.0)).xy * 2.0 - 1.0;
+                        vec2 gc = hash3(i + vec2(0.0, 1.0)).xy * 2.0 - 1.0;
+                        vec2 gd = hash3(i + vec2(1.0, 1.0)).xy * 2.0 - 1.0;
+                        
+                        float va = dot(ga, f - vec2(0.0, 0.0));
+                        float vb = dot(gb, f - vec2(1.0, 0.0));
+                        float vc = dot(gc, f - vec2(0.0, 1.0));
+                        float vd = dot(gd, f - vec2(1.0, 1.0));
+                        
+                        return mix(mix(va, vb, u.x), mix(vc, vd, u.x), u.y) * 0.5 + 0.5;
+                    }
+                    
+                    float fbm(vec2 p) {
+                        float value = 0.0;
+                        float amplitude = 0.5;
+                        float frequency = 1.0;
+                        
+                        // 4 octaves instead of 6 - still looks great
+                        for(int i = 0; i < 4; i++) {
+                            value += amplitude * noise(p * frequency);
+                            frequency *= 2.13;
+                            amplitude *= 0.47;
+                            p = mat2(0.8, -0.6, 0.6, 0.8) * p;
+                        }
+                        
+                        return value;
+                    }
+                    
+                    // Calculate caustic pattern with optimized blur
+                    float causticBlurred(vec2 uv, float offset) {
+                        vec2 p = uv * waveScale;
+                        float t = time;
+                        
+                        // Break up tiling with multiple offset layers
+                        vec2 p1 = p + vec2(t * 0.25 + offset, t * 0.18) + vec2(137.5, 241.3);
+                        vec2 p2 = p * 0.75 - vec2(t * 0.15, t * 0.22 + offset) + vec2(73.2, 191.7);
+                        vec2 p3 = p * 1.27 + vec2(t * 0.11, -t * 0.19) + vec2(311.1, 97.8);
+                        
+                        float h = fbm(p1) + fbm(p2) * 0.5 + fbm(p3) * 0.3;
+                        
+                        float eps = 0.08;
+                        float hx = fbm(p1 + vec2(eps, 0)) + fbm(p2 + vec2(eps, 0)) * 0.5 + fbm(p3 + vec2(eps, 0)) * 0.3;
+                        float hy = fbm(p1 + vec2(0, eps)) + fbm(p2 + vec2(0, eps)) * 0.5 + fbm(p3 + vec2(0, eps)) * 0.3;
+                        
+                        vec2 grad = vec2(hx - h, hy - h) / eps;
+                        
+                        // Reduced blur samples from 5 to 3
+                        float causticSum = 0.0;
+                        const float samples = 3.0;
+                        const float blurRadius = 0.15;
+                        
+                        for(float i = 0.0; i < samples; i++) {
+                            float angle = i * 2.094395 + offset * 10.0; // 2*PI/3
+                            vec2 offset2 = vec2(cos(angle), sin(angle)) * blurRadius;
+                            
+                            vec2 p_blur = p + offset2;
+                            vec2 p3_1 = p_blur + vec2(t * 0.25, t * 0.18) + vec2(137.5, 241.3);
+                            vec2 p3_2 = p_blur * 0.75 - vec2(t * 0.15, t * 0.22) + vec2(73.2, 191.7);
+                            
+                            float h3 = fbm(p3_1) + fbm(p3_2) * 0.5;
+                            float hx3 = fbm(p3_1 + vec2(eps, 0)) + fbm(p3_2 + vec2(eps, 0)) * 0.5;
+                            float hy3 = fbm(p3_1 + vec2(0, eps)) + fbm(p3_2 + vec2(0, eps)) * 0.5;
+                            
+                            vec2 grad3 = vec2(hx3 - h3, hy3 - h3) / eps;
+                            
+                            float c = 1.0 / (1.0 + length(grad3) * 6.0);
+                            causticSum += pow(c, 1.2);
+                        }
+                        
+                        return causticSum / samples;
+                    }
+                    
+                    void main() {
+                        // Use world position for consistent projection
+                        vec2 uv = vWorldPosition.xz;
+                        
+                        // For walls, use appropriate coordinates
+                        if(abs(vNormal.x) > 0.5) {
+                            uv = vWorldPosition.zy;
+                        } else if(abs(vNormal.z) > 0.5) {
+                            uv = vWorldPosition.xy;
+                        }
+                        
+                        // Calculate RGB channels with SUBTLE chromatic aberration
+                        // Most of the caustic should be white with rainbow edges
+                        float r = causticBlurred(uv, chromatic * 4.0);
+                        float g = causticBlurred(uv, 0.0);
+                        float b = causticBlurred(uv, -chromatic * 4.0);
+                        
+                        // Mostly white caustic with subtle color separation
+                        vec3 causticColor = vec3(
+                            r * 1.1,  // Slight red boost
+                            g * 1.0,  // Green as base
+                            b * 1.1   // Slight blue boost
+                        ) * intensity * 2.0;
+                        
+                        // Directional light from above (skylight effect)
+                        vec3 lightDir = normalize(vec3(0.3, -1.0, 0.2));
+                        float lightDot = max(0.0, dot(vNormal, -lightDir));
+                        
+                        // Base color - warm gray
+                        vec3 baseColor = vec3(0.58, 0.6, 0.62);
+                        
+                        // Apply directional lighting
+                        baseColor *= (0.4 + lightDot * 0.6);
+                        
+                        // Add caustics to base
+                        vec3 finalColor = baseColor + causticColor;
+                        
+                        // Only boost saturation on the EDGES of bright areas
+                        float causticStrength = length(causticColor);
+                        if(causticStrength > 1.0) {
+                            // Find gradient of caustic intensity for edges
+                            float edgeFactor = 1.0 - smoothstep(1.0, 2.0, causticStrength);
+                            
+                            // Only add rainbow colors on edges, not the whole pattern
+                            vec3 rainbowBoost = causticColor * edgeFactor * 0.3;
+                            finalColor += rainbowBoost;
+                        }
+                        
+                        // Warm cream tone overall
+                        finalColor *= vec3(1.0, 0.98, 0.95);
+                        
+                        gl_FragColor = vec4(finalColor, 1.0);
+                    }
+                `
+            });
+        }
+        
+        // Create room
+        const roomSize = 5;
+        const roomHeight = 4;
+        
+        // Floor - reduced subdivision
+        const floorGeo = new THREE.PlaneGeometry(roomSize, roomSize, 32, 32);
+        const floorMat = createCausticMaterial();
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = 0;
+        scene.add(floor);
+        
+        // Walls - reduced subdivision
+        const wallGeo = new THREE.PlaneGeometry(roomSize, roomHeight, 32, 32);
+        
+        // Back wall
+        const wall1Mat = createCausticMaterial();
+        const wall1 = new THREE.Mesh(wallGeo, wall1Mat);
+        wall1.position.set(0, roomHeight / 2, -roomSize / 2);
+        scene.add(wall1);
+        
+        // Left wall
+        const wall2Mat = createCausticMaterial();
+        const wall2 = new THREE.Mesh(wallGeo, wall2Mat);
+        wall2.rotation.y = Math.PI / 2;
+        wall2.position.set(-roomSize / 2, roomHeight / 2, 0);
+        scene.add(wall2);
+        
+        // Right wall
+        const wall3Mat = createCausticMaterial();
+        const wall3 = new THREE.Mesh(wallGeo, wall3Mat);
+        wall3.rotation.y = -Math.PI / 2;
+        wall3.position.set(roomSize / 2, roomHeight / 2, 0);
+        scene.add(wall3);
+        
+        // Front wall (partial, for depth)
+        const wall4Mat = createCausticMaterial();
+        const wall4 = new THREE.Mesh(wallGeo, wall4Mat);
+        wall4.rotation.y = Math.PI;
+        wall4.position.set(0, roomHeight / 2, roomSize / 2);
+        scene.add(wall4);
+        
+        // Add ceiling with skylight opening
+        const ceilingGeo = new THREE.PlaneGeometry(roomSize, roomSize);
+        const ceilingMat = new THREE.MeshBasicMaterial({ 
+            color: 0x8899aa,
+            side: THREE.DoubleSide
+        });
+        const ceiling = new THREE.Mesh(ceilingGeo, ceilingMat);
+        ceiling.rotation.x = Math.PI / 2;
+        ceiling.position.y = roomHeight;
+        scene.add(ceiling);
+        
+        // Add subtle fog for atmospheric depth
+        scene.fog = new THREE.Fog(0x1a2530, 5, 15);
+        
+        // Collect all materials for uniform updates
+        const materials = [floorMat, wall1Mat, wall2Mat, wall3Mat, wall4Mat];
+        
+        // Controls
+        let params = {
+            intensity: 1.2,
+            speed: 0.5,
+            waveScale: 0.3,
+            chromatic: 0.015
+        };
+        
+        function setupControl(id, param) {
+            const input = document.getElementById(id);
+            const display = document.getElementById(id + 'Val');
+            
+            input.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                params[param] = value;
+                display.textContent = value.toFixed(3);
+                
+                // Update all materials
+                materials.forEach(mat => {
+                    if(mat.uniforms[param]) {
+                        mat.uniforms[param].value = value;
+                    }
+                });
+            });
+        }
+        
+        setupControl('intensity', 'intensity');
+        setupControl('speed', 'speed');
+        setupControl('scale', 'waveScale');
+        setupControl('chromatic', 'chromatic');
+        
+        // Camera rotation
+        let angle = 0;
+        
+        // Render loop
+        let startTime = Date.now();
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const currentTime = (Date.now() - startTime) * 0.001 * params.speed;
+            
+            // Update time uniform for all materials
+            materials.forEach(mat => {
+                mat.uniforms.time.value = currentTime;
+            });
+            
+            // Slowly rotate camera
+            angle += 0.001;
+            const radius = 5;
+            camera.position.x = Math.sin(angle) * radius;
+            camera.position.z = Math.cos(angle) * radius;
+            camera.position.y = 2.5;
+            camera.lookAt(0, 1, 0);
+            
+            renderer.render(scene, camera);
+        }
+        
+        animate();
+    </script>
+</body>
+</html>

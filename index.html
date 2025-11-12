@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLYMIR - Multidimensional Voxel Engine</title>
+  <style>
+        :root[data-theme="dark"] {
+            /* Switch brand accent from blue to pink */
+            --primary-blue: #ff4d7a;           /* primary accent (pink) */
+            --primary-blue-dark: #d93a66;     /* darker pink */
+            --primary-blue-light: #ff6b95;    /* lighter pink */
+            --secondary-blue: #ff8fb0;        /* secondary accent */
+            --text-primary: #ffffff;
+            --text-secondary: #8892b0;
+            --text-muted: #64748b;
+            --bg-gradient-start: #0a0a1a;
+            --bg-gradient-mid: #1a1a2e;
+            --bg-gradient-end: #16213e;
+            --shadow-primary: rgba(255, 77, 122, 0.30);
+            --shadow-hover: rgba(255, 77, 122, 0.40);
+            --connection-color: #ffffff;
+            --overlay-bg: rgba(0, 0, 0, 0.85);
+            --nav-bg: rgba(26, 26, 46, 0.9);
+            --nav-border: rgba(255, 77, 122, 0.20);
+            --card-bg: rgba(26, 26, 46, 0.8);
+            --card-border: rgba(255, 77, 122, 0.30);
+        }
+
+        :root[data-theme="light"] {
+            --primary-blue: #2563eb;
+            --primary-blue-dark: #1d4ed8;
+            --primary-blue-light: #3b82f6;
+            --secondary-blue: #60a5fa;
+            --text-primary: #1f2937;
+            --text-secondary: #4b5563;
+            --text-muted: #6b7280;
+            --bg-gradient-start: #f8fafc;
+            --bg-gradient-mid: #e2e8f0;
+            --bg-gradient-end: #cbd5e1;
+            --shadow-primary: rgba(37, 99, 235, 0.2);
+            --shadow-hover: rgba(37, 99, 235, 0.3);
+            --connection-color: #2563eb;
+            --overlay-bg: rgba(255, 255, 255, 0.9);
+            --nav-bg: rgba(248, 250, 252, 0.95);
+            --nav-border: rgba(37, 99, 235, 0.2);
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --card-border: rgba(37, 99, 235, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+    body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 50%, var(--bg-gradient-end) 100%);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            transition: all 0.3s ease;
+        }
+
+        /* Navigation Bar */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: var(--nav-bg);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--nav-border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 10002; /* ensure nav is above all content */
+            transition: all 0.3s ease;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .home-btn {
+            background: none;
+            border: none;
+            color: var(--primary-blue);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .home-btn:hover {
+            background: rgba(255, 77, 122, 0.12);
+            transform: scale(1.1);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 25px;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            padding: 8px 16px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: var(--primary-blue);
+            background: rgba(255, 77, 122, 0.12);
+        }
+
+        .nav-right {
+            margin-left: auto;
+            display: flex;
+            gap: 10px;
+        }
+
+        .theme-btn {
+            background: none;
+            border: 1px solid var(--nav-border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .theme-btn:hover, .theme-btn.active {
+            color: var(--primary-blue);
+            border-color: var(--primary-blue);
+            background: rgba(255, 77, 122, 0.12);
+        }
+
+        /* Main Content Areas */
+        .page-content {
+            margin-top: 60px;
+            min-height: calc(100vh - 60px);
+            padding: 40px 20px;
+            display: none;
+            background: transparent !important;
+        }
+
+        .page-content.active {
+            display: block;
+        }
+
+        .home-page {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            min-height: calc(100vh - 60px);
+            overflow: hidden;
+            background: transparent !important;
+        }
+
+        .home-page.active {
+            display: flex;
+        }
+
+        #sparkles-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; /* ensure sparkles stay behind all content */
+            pointer-events: none;
+            background: transparent !important;
+        }
+
+        .main-container {
+            position: relative;
+            z-index: 10001; /* content above sparkles */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Ensure key UI elements remain above decorative layers */
+        .page-content,
+        .home-page,
+        .button-container,
+        .btn-base,
+        .nav-link,
+        .card-btn {
+            position: relative;
+            z-index: 10001;
+        }
+
+        .title-section {
+            margin-bottom: 60px;
+            opacity: 0;
+            animation: fadeInUp 1.2s ease-out 0.3s forwards;
+        }
+
+        .welcome-text {
+            font-size: 18px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: lowercase;
+            filter: blur(0.3px) drop-shadow(0 0 4px var(--shadow-primary)) drop-shadow(0 0 5px var(--shadow-primary));
+        }
+
+        .polymir-title {
+            font-size: clamp(48px, 8vw, 72px);
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px var(--shadow-primary);
+            letter-spacing: 4px;
+            animation: titlePulse 4s ease-in-out infinite;
+        }
+
+        .subtitle {
+            font-size: clamp(16px, 3vw, 20px);
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-bottom: 40px;
+            max-width: 600px;
+            line-height: 1.4;
+            filter: blur(0.3px) drop-shadow(0 0 4px var(--shadow-primary)) drop-shadow(0 0 7.5px var(--shadow-primary));
+        }
+
+        .button-container {
+      display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+            opacity: 0;
+            animation: fadeInUp 1.2s ease-out 0.6s forwards;
+        }
+
+        .btn-base {
+            padding: 18px 36px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            min-width: 180px;
+            border: none;
+            text-decoration: none;
+            display: inline-block;
+            user-select: none;
+        }
+
+        .primary-btn {
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-blue-dark) 100%);
+            color: var(--text-primary);
+            box-shadow: 0 8px 32px var(--shadow-primary);
+        }
+
+        .primary-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 40px var(--shadow-hover);
+            background: linear-gradient(135deg, var(--primary-blue-light) 0%, var(--primary-blue) 100%);
+        }
+
+        .secondary-btn {
+            background: transparent;
+            color: var(--primary-blue);
+            border: 2px solid var(--primary-blue);
+            padding: 16px 34px;
+        }
+
+        .secondary-btn:hover:not(:disabled) {
+            background: rgba(74, 144, 226, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(74, 144, 226, 0.2);
+        }
+
+        /* Content Pages */
+        .content-page {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .page-title {
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px var(--shadow-primary);
+        }
+
+        .page-description {
+            font-size: 20px;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .content-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .content-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px var(--shadow-primary);
+        }
+
+        .card-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 15px;
+        }
+
+        .card-text {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .card-btn {
+            background: var(--primary-blue);
+      color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .card-btn:hover {
+            background: var(--primary-blue-dark);
+            transform: translateY(-1px);
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--overlay-bg);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .loading-content {
+      text-align: center;
+    }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(74, 144, 226, 0.3);
+            border-top: 3px solid var(--primary-blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        .loading-text {
+            color: var(--text-secondary);
+            font-size: 16px;
+            font-weight: 300;
+        }
+
+        .error-message {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        /* Animations */
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+        @keyframes titlePulse {
+            0%, 100% { text-shadow: 0 0 20px var(--shadow-primary); }
+            50% { text-shadow: 0 0 30px var(--shadow-hover), 0 0 40px rgba(74, 144, 226, 0.2); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeInUp {
+            from { 
+                opacity: 0; 
+                transform: translateY(30px);
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0);
+            }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 0 15px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .button-container {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .btn-base {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .page-title {
+                font-size: 36px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+</head>
+<body data-theme="dark">
+    <nav class="navbar">
+        <div class="nav-left">
+            <button class="home-btn" onclick="showPage('home')" title="Home">★</button>
+            <div class="nav-links">
+                <a class="nav-link" onclick="showPage('about')">About</a>
+                <!-- <a class="nav-link" onclick="showPage('worlds')">Worlds</a> -->
+                <a class="nav-link" onclick="showPage('games')">Games</a>
+                <a class="nav-link" onclick="showPage('social')">Social</a>
+            </div>
+        </div>
+        <div class="nav-right">
+            <button class="theme-btn" onclick="openSettings()">⚙️ Settings</button>
+            <button class="theme-btn active" onclick="setTheme('light')">Light</button>
+            <button class="theme-btn" onclick="setTheme('dark')">Dark</button>
+        </div>
+    </nav>
+
+    <div id="starfield-layer" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; pointer-events: none;"></div>
+
+    <canvas id="sparkles-canvas" aria-hidden="true"></canvas>
+
+    <div class="loading-overlay" id="loading-overlay" role="dialog" aria-labelledby="loading-text" aria-hidden="true">
+        <div class="loading-content">
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <div class="loading-text" id="loading-text">Initializing POLYMIR...</div>
+        </div>
+    </div>
+
+    <div class="page-content home-page active" id="home-page">
+        <main class="main-container">
+            <header class="title-section">
+                <div class="welcome-text" aria-label="Welcome message">welcome to</div>
+                <h1 class="polymir-title">polymir</h1>
+                <p class="subtitle">build your own multiverse</p>
+            </header>
+            
+            <nav class="button-container" role="navigation" aria-label="Main actions">
+                <button class="btn-base primary-btn" id="create-local-btn" type="button">
+                    New Universe
+                </button>
+                <button class="btn-base secondary-btn" id="login-btn" type="button">
+                    Load Universe
+                </button>
+            </nav>
+
+            <div class="error-message" id="error-message" role="alert" aria-live="polite"></div>
+        </main>
+    </div>
+
+    <div class="page-content" id="about-page">
+        <div class="content-page">
+            <div class="page-header">
+                <h1 class="page-title">About POLYMIR</h1>
+                <p class="page-description">
+                    A revolutionary multidimensional voxel engine that lets you build infinite worlds beyond the constraints of traditional physics.
+                </p>
+            </div>
+
+            <div class="content-grid">
+                <div class="content-card">
+                    <h3 class="card-title">Non-Euclidean Geometry</h3>
+                    <p class="card-text">
+                        Create worlds that bend, twist, and connect in impossible ways. Design spaces where walking straight can lead you in circles, or where rooms are bigger on the inside.
+                    </p>
+                    <button class="card-btn">Learn More</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Voxel-Based Creation</h3>
+                    <p class="card-text">
+                        Build with precision using our advanced voxel system. Every block can be sculpted, textured, and programmed with custom behaviors and physics properties.
+                    </p>
+                    <button class="card-btn">View Examples</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Multidimensional Worlds</h3>
+                    <p class="card-text">
+                        Layer multiple dimensions within a single world. Create portals between realities, design spaces that exist in multiple states simultaneously.
+                    </p>
+                    <button class="card-btn">Explore Dimensions</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Real-time Physics</h3>
+                    <p class="card-text">
+                        Advanced physics simulation powered by Cannon.js with custom extensions for non-Euclidean spaces. Objects behave realistically even in impossible geometries.
+                    </p>
+                    <button class="card-btn">Physics Demo</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Collaborative Building</h3>
+                    <p class="card-text">
+                        Work together in real-time with friends and builders worldwide. Share your creations, remix others' work, and participate in community challenges.
+                    </p>
+                    <button class="card-btn">Join Community</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Open Source</h3>
+                    <p class="card-text">
+                        POLYMIR is built on open technologies. Extend the engine, create custom tools, and contribute to the growing ecosystem of impossible worlds.
+                    </p>
+                    <button class="card-btn">GitHub Repository</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Worlds page hidden - coming soon -->
+    <div class="page-content" id="worlds-page" style="display: none;">
+    </div>
+
+    <div class="page-content" id="games-page">
+        <div class="content-page">
+            <div class="page-header">
+                <h1 class="page-title">POLYMIR Games (coming soon)</h1>
+                <p class="page-description">
+                    Try out the polymir engine's unique mechanics. Challenge your perception and problem-solving skills.
+                </p>
+            </div>
+
+            <div class="content-grid">
+                <div class="content-card">
+                    <h3 class="card-title">Galactic Parkour</h3>
+                    <p class="card-text">
+                        Jump between planetoids with tiny gravitational centers, learn to navigate micro-gravity as you try to beat the clock, or your highscore.
+                    </p>
+                    <button class="card-btn">Play Now</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Asteroid Runner</h3>
+                    <p class="card-text">
+                        Navigate through an endless, procedurally-generated debris field. Watch planets collide and spawn unpredictable debris. How long can you survive?
+                    </p>
+                    <button class="card-btn">Start Run</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Backrooms Escape</h3>
+                    <p class="card-text">
+                        Experience a realistic backrooms escape, where "forward" loses its meaning and space loops in on itself. How far can you progress in this impossible space?
+                    </p>
+                    <button class="card-btn">Enter the Backrooms</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">4D Prop Hunt</h3>
+                    <p class="card-text">
+                        Use the scroll wheel to navigate through 3D slices of a 4D world, disguised as objects. Attempt to uncover all users, or remain hidden, until time runs out.
+                    </p>
+                    <button class="card-btn">Play 4D</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">One in the Chamber</h3>
+                    <p class="card-text">
+                        One bullet for one life, one shot an instant kill. A free for all in shifting gravity fields with set respawn points. First to 20 kills wins.
+                    </p>
+                    <button class="card-btn">Join Match</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Build Your Game</h3>
+                    <p class="card-text">
+                        Create your own game using the polymir engine. No download or coding knowledge required.
+                    </p>
+                    <button class="card-btn">Game Builder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-content" id="social-page">
+        <div class="content-page">
+            <div class="page-header">
+                <h1 class="page-title">POLYMIR Social</h1>
+                <p class="page-description">
+                    Connect with the POLYMIR community across various platforms. Follow us for updates, share your creations, and join the conversation.
+                </p>
+            </div>
+
+            <div class="content-grid">
+                <div class="content-card">
+                    <h3 class="card-title">Discord</h3>
+                    <p class="card-text">
+                        Join our Discord server for real-time chat, community events, technical support, and sharing your builds with fellow creators.
+                    </p>
+                    <button class="card-btn">Join Discord</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Twitter / X</h3>
+                    <p class="card-text">
+                        Follow us on Twitter for the latest updates, development progress, feature announcements, and community highlights.
+                    </p>
+                    <button class="card-btn">Follow on Twitter</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">GitHub</h3>
+                    <p class="card-text">
+                        Explore our open-source codebase, contribute to development, report issues, and see what's being worked on.
+                    </p>
+                    <button class="card-btn">View GitHub</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">YouTube</h3>
+                    <p class="card-text">
+                        Watch tutorials, development vlogs, community showcases, and learn how to create impossible worlds.
+                    </p>
+                    <button class="card-btn">Subscribe</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Reddit</h3>
+                    <p class="card-text">
+                        Join discussions, share your builds, get feedback, and participate in community challenges on our subreddit.
+                    </p>
+                    <button class="card-btn">Visit Subreddit</button>
+                </div>
+
+                <div class="content-card">
+                    <h3 class="card-title">Bluesky</h3>
+                    <p class="card-text">
+                        Connect with us on Bluesky for another way to stay updated and engage with the POLYMIR community.
+                    </p>
+                    <button class="card-btn">Follow on Bluesky</button>
+                </div>
+            </div>
+        </div>
+  </div>
+
+    <script>
+        'use strict';
+
+        
+        function openSettings() {
+            if (window.mainMenu && window.mainMenu.showSettings) {
+                window.mainMenu.showSettings();
+                return;
+            }
+            
+            import('./ui/SettingsPanel.js').then(module => {
+                if (!window.settingsPanel) {
+                    window.settingsPanel = new module.default(window.engine);
+                }
+                window.settingsPanel.open();
+            }).catch(err => {
+                console.error('Failed to load settings:', err);
+            });
+        }
+        
+        
+        window.returnToHomepage = function() {
+            
+            const home = document.getElementById('home-page');
+            const navbar = document.querySelector('.navbar');
+            const sparkles = document.getElementById('sparkles-canvas');
+            const starfield = document.getElementById('starfield-layer');
+            const generatorMenu = document.getElementById('system-generator-enhanced');
+            
+            
+            if (generatorMenu && generatorMenu.style.display !== 'none') {
+                generatorMenu.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+                generatorMenu.style.opacity = '0';
+                generatorMenu.style.transform = 'scale(0.95)';
+                
+                setTimeout(() => {
+                    if (window.systemGeneratorMenu) {
+                        generatorMenu.style.display = 'none';
+                    }
+                    
+                    
+                    if (home) {
+                        home.style.display = 'flex';
+                        home.style.opacity = '0';
+                        home.style.transform = 'scale(0.95)';
+                        home.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+                    }
+                    
+                    if (navbar) {
+                        navbar.style.opacity = '0';
+                        navbar.style.transform = 'translateY(-100%)';
+                        navbar.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+                    }
+                    
+                    if (sparkles) {
+                        sparkles.style.display = 'block';
+                        sparkles.style.opacity = '0';
+                        sparkles.style.transition = 'opacity 0.8s ease-in';
+                    }
+                    
+                    
+                    
+                    
+                    setTimeout(() => {
+                        if (home) {
+                            home.style.opacity = '1';
+                            home.style.transform = 'scale(1)';
+                        }
+                        
+                        if (navbar) {
+                            navbar.style.opacity = '1';
+                            navbar.style.transform = 'translateY(0)';
+                        }
+                        
+                        if (sparkles) {
+                            sparkles.style.opacity = '1';
+                            
+                            if (window.sparklesSystem) {
+                                window.sparklesSystem.resume();
+                            }
+                        }
+                        
+                        
+                        
+                        
+                        setTimeout(() => {
+                            if (home) home.style.transition = '';
+                            if (navbar) navbar.style.transition = '';
+                            if (sparkles) sparkles.style.transition = '';
+                        }, 600);
+                    }, 50);
+                }, 500);
+            } else {
+                
+                if (home) home.style.display = 'flex';
+                if (sparkles) sparkles.style.display = 'block';
+                
+            }
+        }
+        
+        
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('polymir-theme', theme);
+            
+            
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[onclick="setTheme('${theme}')"]`).classList.add('active');
+            
+            
+            if (window.sparklesSystem) {
+                window.sparklesSystem.updateTheme();
+            }
+        }
+
+        
+        const savedTheme = localStorage.getItem('polymir-theme') || 'dark';
+        setTheme(savedTheme);
+
+        
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        const darkBtn = document.querySelector(`[onclick="setTheme('dark')"]`);
+        if (darkBtn) darkBtn.classList.add('active');
+
+        
+        function showPage(pageId) {
+            
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            
+            document.getElementById(pageId + '-page').classList.add('active');
+            
+            
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            if (pageId !== 'home') {
+                document.querySelector(`[onclick="showPage('${pageId}')"]`).classList.add('active');
+            }
+            
+            
+            const canvas = document.getElementById('sparkles-canvas');
+            if (pageId === 'home') {
+                canvas.style.display = 'block';
+                if (window.sparklesSystem) {
+                    window.sparklesSystem.resume();
+                }
+            } else {
+                canvas.style.display = 'none';
+                if (window.sparklesSystem) {
+                    window.sparklesSystem.pause();
+                }
+            }
+        }
+
+        
+        const CONFIG = {
+            particles: {
+                max: 150,
+                spawnRate: 40,
+                connectionDistance: 120,
+                maxConnections: 4,
+                colors: [
+                    '#4a90e2', '#357abd', '#64b5f6', '#42a5f5',
+                    '#29b6f6', '#26c6da', '#26a69a', '#66bb6a',
+                    '#9ccc65', '#d4e157', '#ffee58', '#ffca28',
+                    '#ffa726', '#ff7043', '#ec407a', '#ab47bc'
+                ]
+            }
+        };
+
+        
+        class SparklesSystem {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d', { alpha: true });
+                this.particles = [];
+                this.connections = [];
+                this.lastSpawnTime = 0;
+                this.isRunning = true;
+                this.isPaused = false;
+                this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+                
+                this.resize();
+                this.init();
+                this.startAnimation();
+                
+                
+                window.addEventListener('resize', this.handleResize.bind(this));
+                document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+                
+                
+                window.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
+            }
+            
+            handleResize() {
+                clearTimeout(this.resizeTimeout);
+                this.resizeTimeout = setTimeout(() => this.resize(), 150);
+            }
+
+            handleVisibilityChange() {
+                this.isRunning = !document.hidden;
+                if (this.isRunning && !this.animationId && !this.isPaused) {
+                    this.startAnimation();
+                }
+            }
+
+            handleWheel(e) {
+                if (e.ctrlKey) {
+                    e.preventDefault();
+                }
+            }
+            
+            resize() {
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+
+                this.canvas.width = width * this.pixelRatio;
+                this.canvas.height = height * this.pixelRatio;
+                this.canvas.style.width = width + 'px';
+                this.canvas.style.height = height + 'px';
+
+                
+                this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+                this.ctx.scale(this.pixelRatio, this.pixelRatio);
+
+                this.logicalWidth = width;
+                this.logicalHeight = height;
+            }
+            
+            init() {
+                for (let i = 0; i < 37; i++) {
+                    this.particles.push(this.createParticle(true));
+                }
+            }
+            
+            createParticle(isInitial = false) {
+                const colors = CONFIG.particles.colors;
+                const particle = {
+                    x: Math.random() * this.logicalWidth,
+                    y: Math.random() * this.logicalHeight,
+                    vx: (Math.random() - 0.5) * 0.4,
+                    vy: (Math.random() - 0.5) * 0.4,
+                    size: Math.random() * 1.85 + 2.25,
+                    opacity: 0,
+                    maxOpacity: Math.random() * 0.6 + 0.4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    phase: 'fadein',
+                    fadeSpeed: (Math.random() * 0.008 + 0.003) / 2,
+                    birthTime: Date.now()
+                };
+
+                if (isInitial) {
+                    particle.opacity = Math.random() * particle.maxOpacity;
+                    particle.phase = Math.random() > 0.5 ? 'fadein' : 'fadeout';
+                }
+
+                return particle;
+            }
+            
+            updateParticle(particle) {
+                particle.x += particle.vx;
+                particle.y += particle.vy;
+                
+                
+                if (particle.x < 0) particle.x = this.logicalWidth;
+                if (particle.x > this.logicalWidth) particle.x = 0;
+                if (particle.y < 0) particle.y = this.logicalHeight;
+                if (particle.y > this.logicalHeight) particle.y = 0;
+                
+                
+                if (particle.phase === 'fadein') {
+                    particle.opacity += particle.fadeSpeed;
+                    if (particle.opacity >= particle.maxOpacity) {
+                        particle.opacity = particle.maxOpacity;
+                        particle.phase = 'fadeout';
+                    }
+                } else if (particle.phase === 'fadeout') {
+                    particle.opacity -= particle.fadeSpeed;
+                    if (particle.opacity <= 0) {
+                        particle.opacity = 0;
+                        particle.phase = 'dead';
+                        return false;
+                    }
+                }
+                
+                return true;
+            }
+            
+            spawnParticles(currentTime) {
+                const spawnCount = Math.random() > 0.6 ? 3 : Math.random() > 0.8 ? 2 : 1;
+                
+                if (currentTime - this.lastSpawnTime > 1000 / CONFIG.particles.spawnRate) {
+                    for (let i = 0; i < spawnCount; i++) {
+                        if (this.particles.length < CONFIG.particles.max) {
+                            this.particles.push(this.createParticle());
+                        }
+                    }
+                    this.lastSpawnTime = currentTime;
+                }
+            }
+            
+            updateConnections() {
+                this.connections = [];
+
+                for (let i = 0; i < this.particles.length; i++) {
+                    const particle = this.particles[i];
+                    const particleConnections = [];
+
+                    for (let j = i + 1; j < this.particles.length; j++) {
+                        const other = this.particles[j];
+                        const distance = Math.sqrt(
+                            Math.pow(particle.x - other.x, 2) +
+                            Math.pow(particle.y - other.y, 2)
+                        );
+
+                        if (distance < CONFIG.particles.connectionDistance &&
+                            particleConnections.length < CONFIG.particles.maxConnections) {
+                            
+                            const particleOpacity = Math.min(particle.opacity, other.opacity);
+                            const distanceFade = (1 - distance / CONFIG.particles.connectionDistance) * 0.3;
+
+                            particleConnections.push({
+                                from: particle,
+                                to: other,
+                                distance: distance,
+                                opacity: distanceFade,
+                                particleOpacity: particleOpacity
+                            });
+                        }
+                    }
+
+                    this.connections.push(...particleConnections);
+                }
+            }
+            
+            render() {
+                
+                this.ctx.clearRect(0, 0, this.logicalWidth, this.logicalHeight);
+                
+                
+                const theme = document.documentElement.getAttribute('data-theme');
+                const connectionColor = theme === 'light' ? '#000000' : '#ffffff';
+                
+                
+                this.connections.forEach(connection => {
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(connection.from.x, connection.from.y);
+                    this.ctx.lineTo(connection.to.x, connection.to.y);
+                    this.ctx.strokeStyle = connectionColor;
+                    
+                    this.ctx.globalAlpha = connection.opacity * Math.pow(connection.particleOpacity, 2);
+                    this.ctx.lineWidth = 2;
+                    this.ctx.stroke();
+                });
+                
+                
+                this.particles.forEach(particle => {
+                    this.ctx.beginPath();
+                    this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                    this.ctx.fillStyle = particle.color;
+                    this.ctx.globalAlpha = particle.opacity;
+                    this.ctx.fill();
+                });
+            }
+            
+            startAnimation() {
+                if (!this.animationId && !this.isPaused) {
+                    this.animate();
+                }
+            }
+            
+            animate() {
+                if (!this.isRunning || this.isPaused) {
+                    this.animationId = null;
+                    return;
+                }
+                
+                const currentTime = performance.now();
+                
+                
+                this.particles = this.particles.filter(particle => this.updateParticle(particle));
+                
+                
+                this.spawnParticles(currentTime);
+                
+                
+                this.updateConnections();
+                
+                
+                this.render();
+                
+                this.animationId = requestAnimationFrame(() => this.animate());
+            }
+            
+            pause() {
+                this.isPaused = true;
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                    this.animationId = null;
+                }
+            }
+            
+            resume() {
+                this.isPaused = false;
+                if (this.isRunning) {
+                    this.startAnimation();
+                }
+            }
+            
+            updateTheme() {
+                
+            }
+            
+            destroy() {
+                this.isRunning = false;
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                window.removeEventListener('resize', this.handleResize);
+                document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+                window.removeEventListener('wheel', this.handleWheel);
+            }
+        }
+
+        
+        class UIManager {
+            constructor() {
+                this.isLoading = false;
+                this.elements = {
+                    createBtn: document.getElementById('create-local-btn'),
+                    loginBtn: document.getElementById('login-btn'),
+                    loadingOverlay: document.getElementById('loading-overlay'),
+                    loadingText: document.getElementById('loading-text'),
+                    errorMessage: document.getElementById('error-message')
+                };
+                
+                this.bindEvents();
+            }
+            
+            bindEvents() {
+                if (this.elements.createBtn) {
+                    this.elements.createBtn.addEventListener('click', this.handleCreateLocal.bind(this));
+                }
+                if (this.elements.loginBtn) {
+                    this.elements.loginBtn.addEventListener('click', this.handleLogin.bind(this));
+                }
+                
+                
+                document.addEventListener('keydown', this.handleKeydown.bind(this));
+            }
+            
+            handleKeydown(e) {
+                if (e.key === 'Enter' && e.target.matches('button')) {
+                    e.target.click();
+                }
+            }
+            
+            async handleCreateLocal() {
+                if (this.isLoading) return;
+
+                
+                sessionStorage.setItem('polymir_create_new', 'true');
+
+                
+                window.location.href = 'game.html';
+            }
+            
+            async handleLogin() {
+                if (this.isLoading) return;
+
+                
+                sessionStorage.setItem('polymir_load_existing', 'true');
+
+                
+                window.location.href = 'game.html';
+            }
+            
+            async simulateWorldCreation() {
+                const steps = [
+                    'Generating terrain...',
+                    'Initializing physics engine...',
+                    'Loading voxel systems...',
+                    'Preparing world...'
+                ];
+                
+                for (let i = 0; i < steps.length; i++) {
+                    this.updateLoadingText(steps[i]);
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                }
+                
+                
+                const modal = document.getElementById('worldgen-modal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                } else {
+                    console.log('World creation complete - redirecting to main game');
+                }
+            }
+            
+            showLoading(text = 'Loading...') {
+                this.isLoading = true;
+                if (this.elements.loadingText) this.elements.loadingText.textContent = text;
+                if (this.elements.loadingOverlay) {
+                    this.elements.loadingOverlay.style.display = 'flex';
+                    this.elements.loadingOverlay.setAttribute('aria-hidden', 'false');
+                }
+                this.setButtonsEnabled(false);
+            }
+            
+            hideLoading() {
+                this.isLoading = false;
+                if (this.elements.loadingOverlay) {
+                    this.elements.loadingOverlay.style.display = 'none';
+                    this.elements.loadingOverlay.setAttribute('aria-hidden', 'true');
+                }
+                this.setButtonsEnabled(true);
+            }
+            
+            updateLoadingText(text) {
+                if (this.elements.loadingText) this.elements.loadingText.textContent = text;
+            }
+            
+            showError(message) {
+                if (this.elements.errorMessage) {
+                    this.elements.errorMessage.textContent = message;
+                    this.elements.errorMessage.style.display = 'block';
+                    
+                    
+                    setTimeout(() => this.clearError(), 5000);
+                }
+            }
+            
+            clearError() {
+                if (this.elements.errorMessage) {
+                    this.elements.errorMessage.style.display = 'none';
+                    this.elements.errorMessage.textContent = '';
+                }
+            }
+            
+            setButtonsEnabled(enabled) {
+                if (this.elements.createBtn) this.elements.createBtn.disabled = !enabled;
+                if (this.elements.loginBtn) this.elements.loginBtn.disabled = !enabled;
+            }
+        }
+
+        
+        function createStarfield() {
+            const container = document.getElementById('starfield-layer');
+            if (!container) return;
+            
+            
+            for (let layer = 0; layer < 3; layer++) {
+                const starsDiv = document.createElement('div');
+                starsDiv.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%;';
+                
+                
+                const starCount = 150 - (layer * 40);
+                for (let i = 0; i < starCount; i++) {
+                    const star = document.createElement('div');
+                    const size = Math.random() * (3 - layer) + 0.5;
+                    const x = Math.random() * 100;
+                    const y = Math.random() * 100;
+                    const brightness = Math.random() * 0.5 + 0.5;
+                    
+                    star.style.cssText = `
+                        position: absolute;
+                        left: ${x}%;
+                        top: ${y}%;
+                        width: ${size}px;
+                        height: ${size}px;
+                        background: white;
+                        border-radius: 50%;
+                        opacity: ${brightness};
+                        animation: twinkle ${2 + Math.random() * 3}s infinite ${Math.random() * 5}s;
+                    `;
+                    
+                    starsDiv.appendChild(star);
+                }
+                
+                
+                starsDiv.style.animation = `drift ${60 + layer * 20}s linear infinite`;
+                container.appendChild(starsDiv);
+            }
+            
+            
+            if (!document.getElementById('starfield-animations')) {
+                const style = document.createElement('style');
+                style.id = 'starfield-animations';
+                style.textContent = `
+                    @keyframes twinkle {
+                        0%, 100% { opacity: inherit; }
+                        50% { opacity: 0.3; }
+                    }
+                    @keyframes drift {
+                        from { transform: translateX(0); }
+                        to { transform: translateX(-100px); }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+        }
+
+        
+        let sparklesSystem = null;
+        let uiManager = null;
+
+        function initializeApp() {
+            try {
+                
+                createStarfield();
+                
+                
+                const canvas = document.getElementById('sparkles-canvas');
+                if (canvas) {
+                    sparklesSystem = new SparklesSystem(canvas);
+                    window.sparklesSystem = sparklesSystem;
+                }
+                
+                
+                uiManager = new UIManager();
+                
+                console.log('POLYMIR Frontend initialized successfully');
+                
+                
+                const checkForEngine = () => {
+                    if (window.polymirEngine || window.uiManager) {
+                        console.log('POLYMIR Engine detected - frontend ready for integration');
+                        return;
+                    }
+                    setTimeout(checkForEngine, 100);
+                };
+                checkForEngine();
+                
+            } catch (error) {
+                console.error('Failed to initialize POLYMIR Frontend:', error);
+            }
+        }
+
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+
+        
+        window.addEventListener('beforeunload', () => {
+            if (sparklesSystem) {
+                sparklesSystem.destroy();
+            }
+        });
+
+        window.PolymirFrontend = {
+            showLoading: (text) => uiManager?.showLoading(text),
+            hideLoading: () => uiManager?.hideLoading(),
+            showError: (message) => uiManager?.showError(message),
+            showPage: showPage,
+            setTheme: setTheme
+        };
+    </script>
+    <script type="module">
+        import { MirrorEngineCore } from './index.js';
+
+        window.MirrorEngineCore = MirrorEngineCore;
+
+        console.log('POLYMIR Engine module loaded');
+    </script>
+</body>
+</html>

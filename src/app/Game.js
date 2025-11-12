@@ -338,7 +338,7 @@ export class Game {
 
         this.loadedSurfaceChunks++;
         if (this.loadedSurfaceChunks % 100 === 0 || this.loadedSurfaceChunks === this.surfaceChunksToLoad.length) {
-            console.log(`✓ Surface loading: ${this.loadedSurfaceChunks}/${this.surfaceChunksToLoad.length} chunks (${Math.round(this.loadedSurfaceChunks / this.surfaceChunks ToLoad.length * 100)}%)`);
+            console.log(`✓ Surface loading: ${this.loadedSurfaceChunks}/${this.surfaceChunksToLoad.length} chunks (${Math.round(this.loadedSurfaceChunks / this.surfaceChunksToLoad.length * 100)}%)`);
         }
     }
 

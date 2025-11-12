@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLYMIR - Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            z-index: 100;
+        }
+        #loading-modal {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(10, 15, 30, 0.92);
+            border: 2px solid rgba(100, 150, 255, 0.7);
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-family: monospace;
+            z-index: 1000;
+            min-width: 300px;
+            text-align: center;
+        }
+        #loading-modal.hidden {
+            display: none;
+        }
+        #loading-status {
+            font-size: 14px;
+            font-weight: bold;
+            color: rgba(180, 200, 255, 1.0);
+            margin-bottom: 10px;
+        }
+        #loading-bar-container {
+            width: 250px;
+            height: 20px;
+            background: rgba(50, 80, 140, 0.5);
+            border: 1px solid rgba(100, 150, 255, 0.4);
+            margin: 0 auto 8px auto;
+            position: relative;
+        }
+        #loading-bar-fill {
+            height: 100%;
+            background: rgba(100, 180, 255, 1.0);
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+        #loading-percent {
+            font-size: 12px;
+            color: rgba(200, 220, 255, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        FPS: <span id="fps">0</span> | Memory: <span id="memory">0</span> MB<br>
+        Scroll to zoom, drag to rotate<br>
+        <span id="mode">Rendering: IMPOSTOR</span><br>
+        Distance: <span id="distance">0</span>m<br>
+        Chunks loaded: <span id="chunks">0</span><br>
+        LOD switches at 300m
+    </div>
+
+    <div id="loading-modal">
+        <div id="loading-status">Loading surface voxels...</div>
+        <div id="loading-bar-container">
+            <div id="loading-bar-fill"></div>
+        </div>
+        <div id="loading-percent">0% (0 / 0)</div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script type="module">
+        import { Game } from './src/app/Game.js';
+
+        const canvas = document.getElementById('canvas');
+        const game = new Game(canvas);
+
+        game.start();
+        game.initialize();
+    </script>
+</body>
+</html>

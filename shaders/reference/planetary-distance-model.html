@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymir - Planetary Distance Model System</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: monospace;
+            background: #000;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 11px;
+            line-height: 1.5;
+            max-width: 300px;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(20,20,20,0.95);
+            padding: 15px;
+            border-radius: 5px;
+            color: white;
+            max-height: 90vh;
+            overflow-y: auto;
+            width: 280px;
+        }
+        #controls h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+        .control-group {
+            margin: 15px 0;
+            padding: 10px;
+            background: rgba(40,40,40,0.9);
+            border-radius: 3px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 5px 2px;
+            font-size: 11px;
+        }
+        button:hover { background: #45a049; }
+        button.danger { background: #f44336; }
+        button.danger:hover { background: #da190b; }
+        input[type="range"] {
+            width: 150px;
+            vertical-align: middle;
+        }
+        label {
+            display: inline-block;
+            width: 120px;
+            font-size: 11px;
+        }
+        .value {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+            color: #4CAF50;
+            font-size: 11px;
+        }
+        .stats {
+            color: #4CAF50;
+            margin-top: 5px;
+        }
+        .update-flash {
+            background: rgba(76, 175, 80, 0.3) !important;
+            transition: background 0.5s;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <strong>Polymir - Planetary Distance Model</strong><br>
+        <div class="stats">
+            Distance: <span id="distanceVal">0</span>m<br>
+            Render Mode: <span id="renderMode">Distance Mesh</span><br>
+            FPS: <span id="fpsVal">0</span><br>
+            Pending Updates: <span id="pendingUpdates">0</span><br>
+            Last Update: <span id="lastUpdate">Never</span>
+        </div>
+        <br>
+        <strong>Controls:</strong><br>
+        Mouse: Rotate view<br>
+        Wheel: Zoom in/out<br>
+        B: Place 50 random blocks<br>
+        S: Place small building<br>
+        L: Place LARGE building<br>
+        C: Place city block
+    </div>
+
+    <div id="controls">
+        <h3>Planet Configuration</h3>
+
+        <div class="control-group">
+            <h4 style="margin: 0 0 10px 0; color: #4CAF50;">Camera Presets</h4>
+            <button id="viewOrbit">Orbital (500m)</button>
+            <button id="viewApproach">Approach (200m)</button>
+            <button id="viewClose">Close (50m)</button>
+            <button id="viewSurface">Surface (5m)</button>
+        </div>
+
+        <div class="control-group" id="actionGroup">
+            <h4 style="margin: 0 0 10px 0; color: #4CAF50;">Terrain Actions</h4>
+            <button id="placeSmall">Small Building (10x10)</button>
+            <button id="placeLarge">Large Building (50x50)</button>
+            <button id="placeCity">City Block (100x100)</button>
+            <button id="addTerrain">Add 50 Random Blocks</button>
+            <button class="danger" id="forceUpdate">Force Update NOW</button>
+        </div>
+
+        <div class="control-group">
+            <h4 style="margin: 0 0 10px 0; color: #4CAF50;">Update Thresholds</h4>
+            <div>
+                <label>Dirty Threshold:</label>
+                <input type="range" id="dirtyThreshold" min="0.01" max="0.2" step="0.01" value="0.05">
+                <span class="value" id="dirtyThresholdVal">5%</span>
+            </div>
+            <div>
+                <label>Update Interval:</label>
+                <input type="range" id="updateInterval" min="100" max="5000" step="100" value="1000">
+                <span class="value" id="updateIntervalVal">1000ms</span>
+            </div>
+            <div>
+                <label>Visual Intensity:</label>
+                <input type="range" id="visualIntensity" min="1" max="20" step="1" value="10">
+                <span class="value" id="visualIntensityVal">10x</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Simple 3D noise function (Perlin-like)
+        class SimplexNoise {
+            constructor(seed = 12345) {
+                this.grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+                             [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+                             [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+                this.p = [];
+                for (let i = 0; i < 256; i++) {
+                    this.p[i] = Math.floor(Math.random() * 256);
+                }
+                this.perm = [];
+                for (let i = 0; i < 512; i++) {
+                    this.perm[i] = this.p[i & 255];
+                }
+            }
+
+            dot(g, x, y, z) {
+                return g[0] * x + g[1] * y + g[2] * z;
+            }
+
+            noise(x, y, z) {
+                const X = Math.floor(x) & 255;
+                const Y = Math.floor(y) & 255;
+                const Z = Math.floor(z) & 255;
+                x -= Math.floor(x);
+                y -= Math.floor(y);
+                z -= Math.floor(z);
+                const u = x * x * x * (x * (x * 6 - 15) + 10);
+                const v = y * y * y * (y * (y * 6 - 15) + 10);
+                const w = z * z * z * (z * (z * 6 - 15) + 10);
+                const A = this.perm[X] + Y;
+                const AA = this.perm[A] + Z;
+                const AB = this.perm[A + 1] + Z;
+                const B = this.perm[X + 1] + Y;
+                const BA = this.perm[B] + Z;
+                const BB = this.perm[B + 1] + Z;
+
+                return this.lerp(w,
+                    this.lerp(v,
+                        this.lerp(u, this.grad(this.perm[AA], x, y, z),
+                                    this.grad(this.perm[BA], x - 1, y, z)),
+                        this.lerp(u, this.grad(this.perm[AB], x, y - 1, z),
+                                    this.grad(this.perm[BB], x - 1, y - 1, z))),
+                    this.lerp(v,
+                        this.lerp(u, this.grad(this.perm[AA + 1], x, y, z - 1),
+                                    this.grad(this.perm[BA + 1], x - 1, y, z - 1)),
+                        this.lerp(u, this.grad(this.perm[AB + 1], x, y - 1, z - 1),
+                                    this.grad(this.perm[BB + 1], x - 1, y - 1, z - 1))));
+            }
+
+            grad(hash, x, y, z) {
+                const h = hash & 15;
+                const u = h < 8 ? x : y;
+                const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
+                return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+            }
+
+            lerp(t, a, b) {
+                return a + t * (b - a);
+            }
+        }
+
+        const noise = new SimplexNoise();
+
+        // Planetary Distance Model System
+        class PlanetaryDistanceModel {
+            constructor(planet, scene, config = {}) {
+                this.planet = planet;
+                this.scene = scene;
+
+                // Configuration
+                this.chunkDirtyThreshold = config.chunkDirtyThreshold || 0.05;
+                this.updateInterval = config.updateInterval || 1000;
+                this.transitionDistance = config.transitionDistance || 200;
+                this.visualIntensity = config.visualIntensity || 10;
+
+                // Distance mesh
+                this.distanceMesh = null;
+                this.atmosphereMesh = null;
+                this.heightmapTexture = null;
+                this.colorTexture = null;
+                this.heightmapSize = 1024;
+
+                // Tracking
+                this.chunkSize = 32;
+                this.chunkHeight = 64;
+                this.chunkVoxelCounts = new Map();
+                this.chunkDirtyVoxels = new Map();
+                this.dirtyChunks = new Set();
+                this.placedSchematics = new Map();
+                this.pendingUpdates = new Set();
+
+                // State
+                this.isRegenerating = false;
+                this.lastUpdateTime = 0;
+                this.lastUpdateTimestamp = 0;
+
+                this.initializeDistanceMesh();
+            }
+
+            initializeDistanceMesh() {
+                const planetRadius = this.planet.radius;
+
+                // Higher subdivision for smoother surface
+                const geometry = new THREE.IcosahedronGeometry(planetRadius, 7);
+
+                // Create heightmap texture with multi-octave noise
+                const heightData = new Float32Array(this.heightmapSize * this.heightmapSize);
+
+                for (let y = 0; y < this.heightmapSize; y++) {
+                    for (let x = 0; x < this.heightmapSize; x++) {
+                        const u = x / this.heightmapSize;
+                        const v = y / this.heightmapSize;
+
+                        // Sphere coordinates
+                        const theta = u * Math.PI * 2;
+                        const phi = v * Math.PI;
+                        const sx = Math.sin(phi) * Math.cos(theta);
+                        const sy = Math.cos(phi);
+                        const sz = Math.sin(phi) * Math.sin(theta);
+
+                        // Multi-octave noise
+                        let height = 0;
+
+                        // Continents (large scale)
+                        height += noise.noise(sx * 2, sy * 2, sz * 2) * 15;
+
+                        // Mountain ranges
+                        height += noise.noise(sx * 5, sy * 5, sz * 5) * 8;
+
+                        // Hills
+                        height += noise.noise(sx * 12, sy * 12, sz * 12) * 4;
+
+                        // Detail
+                        height += noise.noise(sx * 25, sy * 25, sz * 25) * 2;
+
+                        heightData[y * this.heightmapSize + x] = height;
+                    }
+                }
+
+                this.heightmapTexture = new THREE.DataTexture(
+                    heightData, this.heightmapSize, this.heightmapSize,
+                    THREE.RedFormat, THREE.FloatType
+                );
+                this.heightmapTexture.wrapS = THREE.RepeatWrapping;
+                this.heightmapTexture.wrapT = THREE.ClampToEdgeWrapping;
+                this.heightmapTexture.needsUpdate = true;
+
+                // Color texture based on height
+                const colorData = new Uint8Array(this.heightmapSize * this.heightmapSize * 3);
+                for (let i = 0; i < this.heightmapSize * this.heightmapSize; i++) {
+                    const h = heightData[i];
+
+                    if (h < -5) { // Deep water
+                        colorData[i * 3] = 33; colorData[i * 3 + 1] = 110; colorData[i * 3 + 2] = 175;
+                    } else if (h < 0) { // Shallow water
+                        colorData[i * 3] = 76; colorData[i * 3 + 1] = 150; colorData[i * 3 + 2] = 200;
+                    } else if (h < 2) { // Beach/shore
+                        colorData[i * 3] = 194; colorData[i * 3 + 1] = 178; colorData[i * 3 + 2] = 128;
+                    } else if (h < 10) { // Grassland
+                        colorData[i * 3] = 76; colorData[i * 3 + 1] = 153; colorData[i * 3 + 2] = 76;
+                    } else if (h < 18) { // Forest/hills
+                        colorData[i * 3] = 62; colorData[i * 3 + 1] = 130; colorData[i * 3 + 2] = 62;
+                    } else if (h < 25) { // Mountains
+                        colorData[i * 3] = 120; colorData[i * 3 + 1] = 100; colorData[i * 3 + 2] = 90;
+                    } else { // Snow peaks
+                        colorData[i * 3] = 240; colorData[i * 3 + 1] = 240; colorData[i * 3 + 2] = 250;
+                    }
+                }
+
+                this.colorTexture = new THREE.DataTexture(
+                    colorData, this.heightmapSize, this.heightmapSize,
+                    THREE.RGBFormat, THREE.UnsignedByteType
+                );
+                this.colorTexture.wrapS = THREE.RepeatWrapping;
+                this.colorTexture.wrapT = THREE.ClampToEdgeWrapping;
+                this.colorTexture.needsUpdate = true;
+
+                // Shader material
+                const material = new THREE.ShaderMaterial({
+                    vertexShader: this.getVertexShader(),
+                    fragmentShader: this.getFragmentShader(),
+                    uniforms: {
+                        uHeightmap: { value: this.heightmapTexture },
+                        uColorMap: { value: this.colorTexture },
+                        uSunDir: { value: new THREE.Vector3(0.5, 1.0, 0.3).normalize() },
+                        uSunColor: { value: new THREE.Color(1.0, 0.95, 0.8) },
+                        uAmbientColor: { value: new THREE.Color(0.4, 0.5, 0.6) },
+                        uPlanetRadius: { value: planetRadius },
+                        uTime: { value: 0 }
+                    }
+                });
+
+                this.distanceMesh = new THREE.Mesh(geometry, material);
+                this.scene.add(this.distanceMesh);
+
+                // Store sun direction for rotation
+                this.sunAngle = 0;
+
+                this.createAtmosphere(planetRadius);
+            }
+
+            createAtmosphere(planetRadius) {
+                // Cloud layer
+                this.createCloudLayer(planetRadius);
+
+                // Atmospheric shell
+                const atmosphereRadius = planetRadius + 30;
+                const geometry = new THREE.IcosahedronGeometry(atmosphereRadius, 5);
+
+                const material = new THREE.ShaderMaterial({
+                    vertexShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        void main() {
+                            vNormal = normalize(normalMatrix * normal);
+                            vPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        uniform vec3 cameraPos;
+                        void main() {
+                            vec3 viewDir = normalize(vPosition - cameraPos);
+                            float fresnel = pow(1.0 - abs(dot(viewDir, vNormal)), 2.5);
+                            vec3 atmosphereColor = vec3(0.5, 0.7, 1.0);
+                            float alpha = fresnel * 0.3;
+                            gl_FragColor = vec4(atmosphereColor, alpha);
+                        }
+                    `,
+                    uniforms: {
+                        cameraPos: { value: new THREE.Vector3() }
+                    },
+                    transparent: true,
+                    side: THREE.BackSide,
+                    depthWrite: false
+                });
+
+                this.atmosphereMesh = new THREE.Mesh(geometry, material);
+                this.scene.add(this.atmosphereMesh);
+            }
+
+            createCloudLayer(planetRadius) {
+                const cloudRadius = planetRadius + 10;
+                const geometry = new THREE.IcosahedronGeometry(cloudRadius, 6);
+
+                const material = new THREE.ShaderMaterial({
+                    vertexShader: this.getCloudVertexShader(),
+                    fragmentShader: this.getCloudFragmentShader(),
+                    uniforms: {
+                        uTime: { value: 0 },
+                        uDensity: { value: 0.6 },
+                        uCoverage: { value: 0.5 },
+                        uPuffiness: { value: 0.7 },
+                        uScale: { value: 3.0 },
+                        uTurbulence: { value: 0.4 },
+                        uSunDir: { value: new THREE.Vector3(0.5, 1.0, 0.3).normalize() },
+                        uSunColor: { value: new THREE.Color(1.0, 0.95, 0.8) },
+                        uAmbientColor: { value: new THREE.Color(0.4, 0.5, 0.6) },
+                        cameraPos: { value: new THREE.Vector3() }
+                    },
+                    transparent: true,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+
+                this.cloudMesh = new THREE.Mesh(geometry, material);
+                this.scene.add(this.cloudMesh);
+            }
+
+            getCloudVertexShader() {
+                return `
+                    varying vec3 vPosition;
+                    varying vec3 vWorldPos;
+                    varying vec3 vNormal;
+
+                    void main() {
+                        vPosition = position;
+                        vNormal = normalize(normalMatrix * normal);
+                        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+                        vWorldPos = worldPos.xyz;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `;
+            }
+
+            getCloudFragmentShader() {
+                return `
+                    varying vec3 vPosition;
+                    varying vec3 vWorldPos;
+                    varying vec3 vNormal;
+
+                    uniform float uTime;
+                    uniform float uDensity;
+                    uniform float uCoverage;
+                    uniform float uPuffiness;
+                    uniform float uScale;
+                    uniform float uTurbulence;
+                    uniform vec3 uSunDir;
+                    uniform vec3 uSunColor;
+                    uniform vec3 uAmbientColor;
+                    uniform vec3 cameraPos;
+
+                    // 3D Noise functions
+                    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+                    vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+                    float snoise(vec3 v) {
+                        const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+                        const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+                        vec3 i = floor(v + dot(v, C.yyy));
+                        vec3 x0 = v - i + dot(i, C.xxx);
+                        vec3 g = step(x0.yzx, x0.xyz);
+                        vec3 l = 1.0 - g;
+                        vec3 i1 = min(g.xyz, l.zxy);
+                        vec3 i2 = max(g.xyz, l.zxy);
+                        vec3 x1 = x0 - i1 + C.xxx;
+                        vec3 x2 = x0 - i2 + C.yyy;
+                        vec3 x3 = x0 - D.yyy;
+                        i = mod289(i);
+                        vec4 p = permute(permute(permute(
+                            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+                            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+                            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+                        float n_ = 0.142857142857;
+                        vec3 ns = n_ * D.wyz - D.xzx;
+                        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                        vec4 x_ = floor(j * ns.z);
+                        vec4 y_ = floor(j - 7.0 * x_);
+                        vec4 x = x_ * ns.x + ns.yyyy;
+                        vec4 y = y_ * ns.x + ns.yyyy;
+                        vec4 h = 1.0 - abs(x) - abs(y);
+                        vec4 b0 = vec4(x.xy, y.xy);
+                        vec4 b1 = vec4(x.zw, y.zw);
+                        vec4 s0 = floor(b0)*2.0 + 1.0;
+                        vec4 s1 = floor(b1)*2.0 + 1.0;
+                        vec4 sh = -step(h, vec4(0.0));
+                        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+                        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+                        vec3 p0 = vec3(a0.xy,h.x);
+                        vec3 p1 = vec3(a0.zw,h.y);
+                        vec3 p2 = vec3(a1.xy,h.z);
+                        vec3 p3 = vec3(a1.zw,h.w);
+                        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+                        p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+                        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                        m = m * m;
+                        return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+                    }
+
+                    // Worley noise for puffy cumulus shapes
+                    float worley(vec3 p) {
+                        vec3 i = floor(p);
+                        vec3 f = fract(p);
+                        float minDist = 1.0;
+                        for(int x = -1; x <= 1; x++) {
+                            for(int y = -1; y <= 1; y++) {
+                                for(int z = -1; z <= 1; z++) {
+                                    vec3 offset = vec3(float(x), float(y), float(z));
+                                    vec3 cellPos = offset + vec3(
+                                        sin(dot(i + offset, vec3(127.1, 311.7, 74.7))) * 43758.5453,
+                                        sin(dot(i + offset, vec3(269.5, 183.3, 246.1))) * 43758.5453,
+                                        sin(dot(i + offset, vec3(419.2, 371.9, 168.2))) * 43758.5453
+                                    );
+                                    cellPos = 0.5 + 0.5 * sin(cellPos * 6.2831853);
+                                    float dist = length(f - offset - cellPos);
+                                    minDist = min(minDist, dist);
+                                }
+                            }
+                        }
+                        return minDist;
+                    }
+
+                    // Multi-octave FBM for cloud detail
+                    float fbm(vec3 p) {
+                        float value = 0.0;
+                        float amplitude = 0.5;
+                        float frequency = 1.0;
+                        for (int i = 0; i < 4; i++) {
+                            value += amplitude * snoise(p * frequency);
+                            frequency *= 2.0;
+                            amplitude *= 0.5;
+                        }
+                        return value;
+                    }
+
+                    // Volumetric cloud density function
+                    float getCloudDensity(vec3 p) {
+                        vec3 windOffset = vec3(uTime * 0.05, 0.0, uTime * 0.03);
+                        p += windOffset;
+
+                        // Large scale cumulus shape using Worley noise
+                        float cloudShape = 1.0 - worley(p * uScale * 0.1);
+                        cloudShape = pow(cloudShape, 2.0 - uPuffiness);
+
+                        // Add turbulent detail
+                        float detail = fbm(p * uScale * 0.4) * uTurbulence;
+                        cloudShape += detail * 0.5;
+
+                        // Coverage threshold
+                        cloudShape = smoothstep(1.0 - uCoverage, 1.0 - uCoverage + 0.3, cloudShape);
+
+                        // Add small scale detail for wispy edges
+                        float smallDetail = snoise(p * uScale * 1.2) * 0.2;
+                        cloudShape += smallDetail * cloudShape;
+
+                        return cloudShape * uDensity;
+                    }
+
+                    // Raymarch through cloud volume
+                    vec4 raymarchClouds(vec3 rayOrigin, vec3 rayDir, float maxDist) {
+                        float stepSize = 0.15;
+                        vec3 pos = rayOrigin;
+                        float transmittance = 1.0;
+                        vec3 cloudColor = vec3(0.0);
+
+                        for(int i = 0; i < 25; i++) {
+                            if(transmittance < 0.01) break;
+
+                            float cloudDensity = getCloudDensity(pos);
+
+                            if(cloudDensity > 0.01) {
+                                // Sample toward sun for lighting
+                                float lightSample = getCloudDensity(pos + uSunDir * 0.3);
+                                float lightTransmittance = exp(-lightSample * 3.0);
+
+                                // Mix ambient and sun lighting
+                                vec3 lit = mix(uAmbientColor, uSunColor, lightTransmittance);
+
+                                // Beer's law absorption
+                                float absorption = exp(-cloudDensity * stepSize * 5.0);
+                                cloudColor += (1.0 - absorption) * transmittance * lit;
+                                transmittance *= absorption;
+                            }
+
+                            pos += rayDir * stepSize;
+                            if(length(pos - rayOrigin) > maxDist) break;
+                        }
+
+                        return vec4(cloudColor, 1.0 - transmittance);
+                    }
+
+                    void main() {
+                        // Ray direction from camera through cloud shell
+                        vec3 rayDir = normalize(vWorldPos - cameraPos);
+                        vec3 rayOrigin = vWorldPos;
+
+                        // Raymarch through clouds
+                        vec4 cloudResult = raymarchClouds(rayOrigin, rayDir * 0.08, 1.2);
+
+                        // Final color with atmospheric perspective
+                        vec3 finalColor = cloudResult.rgb;
+                        float alpha = cloudResult.a;
+
+                        float dist = length(vWorldPos - cameraPos);
+                        vec3 fogColor = uAmbientColor * 1.5;
+                        finalColor = mix(finalColor, fogColor, 1.0 - exp(-dist * 0.001));
+
+                        gl_FragColor = vec4(finalColor, alpha * 0.9);
+                    }
+                `;
+            }
+
+            getVertexShader() {
+                return `
+                    uniform sampler2D uHeightmap;
+                    uniform float uPlanetRadius;
+                    varying vec2 vUv;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    varying float vHeight;
+
+                    vec2 sphereToUV(vec3 pos) {
+                        vec3 n = normalize(pos);
+                        float u = 0.5 + atan(n.z, n.x) / (2.0 * 3.14159265);
+                        float v = 0.5 - asin(n.y) / 3.14159265;
+                        return vec2(u, v);
+                    }
+
+                    void main() {
+                        vUv = sphereToUV(position);
+                        float height = texture2D(uHeightmap, vUv).r;
+                        vHeight = height;
+
+                        // Displace along normal
+                        vec3 displaced = position + normalize(position) * height * 0.5;
+
+                        vNormal = normalize(normalMatrix * normalize(displaced));
+                        vPosition = displaced;
+
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+                    }
+                `;
+            }
+
+            getFragmentShader() {
+                return `
+                    uniform sampler2D uColorMap;
+                    uniform vec3 uSunDir;
+                    uniform vec3 uSunColor;
+                    uniform vec3 uAmbientColor;
+                    uniform float uTime;
+                    varying vec2 vUv;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    varying float vHeight;
+
+                    // Simple noise for cloud shadows
+                    float hash(vec3 p) {
+                        p = fract(p * vec3(443.897, 441.423, 437.195));
+                        p += dot(p, p.yxz + 19.19);
+                        return fract((p.x + p.y) * p.z);
+                    }
+
+                    float noise(vec3 p) {
+                        vec3 i = floor(p);
+                        vec3 f = fract(p);
+                        f = f * f * (3.0 - 2.0 * f);
+                        return mix(mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+                                      mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+                                  mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+                                      mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+                    }
+
+                    float cloudShadow(vec3 pos) {
+                        vec3 windOffset = vec3(uTime * 0.05, 0.0, uTime * 0.03);
+                        vec3 p = (pos + windOffset) * 0.015;
+                        float shadow = noise(p) * 0.5 + noise(p * 2.0) * 0.25 + noise(p * 4.0) * 0.125;
+                        return smoothstep(0.45, 0.55, shadow);
+                    }
+
+                    void main() {
+                        vec3 baseColor = texture2D(uColorMap, vUv).rgb;
+
+                        // Sun lighting
+                        float sunDot = max(0.0, dot(vNormal, uSunDir));
+
+                        // Cloud shadows
+                        float shadow = cloudShadow(vPosition);
+                        shadow = mix(0.5, 1.0, shadow); // Darken by 50% max
+
+                        vec3 diffuse = uSunColor * sunDot * 0.7 * shadow;
+                        vec3 ambient = uAmbientColor * 0.4;
+
+                        vec3 finalColor = baseColor * (diffuse + ambient);
+
+                        // Atmospheric fog for distant areas
+                        float fog = 1.0 - exp(-length(vPosition) * 0.0005);
+                        finalColor = mix(finalColor, uAmbientColor, fog * 0.2);
+
+                        gl_FragColor = vec4(finalColor, 1.0);
+                    }
+                `;
+            }
+
+            onVoxelChange(x, y, z) {
+                const chunkKey = this.getChunkKey(x, y, z);
+                const dirtyCount = (this.chunkDirtyVoxels.get(chunkKey) || 0) + 1;
+                this.chunkDirtyVoxels.set(chunkKey, dirtyCount);
+
+                const totalVoxels = this.chunkSize * this.chunkSize * this.chunkHeight;
+                const dirtyPercent = dirtyCount / totalVoxels;
+
+                if (dirtyPercent >= this.chunkDirtyThreshold) {
+                    this.dirtyChunks.add(chunkKey);
+                    this.pendingUpdates.add(chunkKey);
+                    this.chunkDirtyVoxels.set(chunkKey, 0);
+                }
+            }
+
+            onSchematicPlaced(schematicID, bounds) {
+                console.log(`[DistanceModel] Schematic placed: ${schematicID}, size: ${bounds.size}`);
+
+                this.placedSchematics.set(schematicID, { bounds, lastUpdate: Date.now() });
+
+                const affectedChunks = this.getChunksInBounds(bounds);
+                console.log(`[DistanceModel] Affecting ${affectedChunks.size} chunks`);
+
+                for (const chunkKey of affectedChunks) {
+                    this.dirtyChunks.add(chunkKey);
+                    this.pendingUpdates.add(chunkKey);
+                }
+
+                // Immediate update for large schematics
+                if (bounds.size > 50 * 50 * 50) {
+                    console.log('[DistanceModel] Large schematic - immediate update');
+                    this.scheduleImmediateUpdate(affectedChunks);
+                }
+
+                // Flash UI
+                document.getElementById('actionGroup').classList.add('update-flash');
+                setTimeout(() => {
+                    document.getElementById('actionGroup').classList.remove('update-flash');
+                }, 500);
+            }
+
+            getChunkKey(x, y, z) {
+                const cx = Math.floor(x / this.chunkSize);
+                const cy = Math.floor(y / this.chunkHeight);
+                const cz = Math.floor(z / this.chunkSize);
+                return `${cx},${cy},${cz}`;
+            }
+
+            getChunksInBounds(bounds) {
+                const chunks = new Set();
+                const minChunk = {
+                    x: Math.floor(bounds.min.x / this.chunkSize),
+                    y: Math.floor(bounds.min.y / this.chunkHeight),
+                    z: Math.floor(bounds.min.z / this.chunkSize)
+                };
+                const maxChunk = {
+                    x: Math.floor(bounds.max.x / this.chunkSize),
+                    y: Math.floor(bounds.max.y / this.chunkHeight),
+                    z: Math.floor(bounds.max.z / this.chunkSize)
+                };
+
+                for (let x = minChunk.x; x <= maxChunk.x; x++) {
+                    for (let y = minChunk.y; y <= maxChunk.y; y++) {
+                        for (let z = minChunk.z; z <= maxChunk.z; z++) {
+                            chunks.add(`${x},${y},${z}`);
+                        }
+                    }
+                }
+                return chunks;
+            }
+
+            scheduleImmediateUpdate(chunkKeys) {
+                this.pendingUpdates = new Set([...this.pendingUpdates, ...chunkKeys]);
+                this.lastUpdateTime = 0;
+            }
+
+            update(deltaTime, cameraPos) {
+                const now = Date.now();
+
+                // Rotate sun
+                this.sunAngle += deltaTime * 0.1; // Rotate sun every 60 seconds approx
+                const sunDir = new THREE.Vector3(
+                    Math.cos(this.sunAngle),
+                    Math.sin(this.sunAngle) * 0.5 + 0.5, // Keep sun mostly above horizon
+                    Math.sin(this.sunAngle) * 0.3
+                ).normalize();
+
+                // Update sun direction in all materials
+                if (this.distanceMesh) {
+                    this.distanceMesh.material.uniforms.uSunDir.value.copy(sunDir);
+                    this.distanceMesh.material.uniforms.uTime.value += deltaTime;
+                }
+
+                if (this.cloudMesh) {
+                    this.cloudMesh.material.uniforms.uSunDir.value.copy(sunDir);
+                    this.cloudMesh.material.uniforms.uTime.value += deltaTime;
+                    this.cloudMesh.material.uniforms.cameraPos.value.copy(cameraPos);
+                }
+
+                if (this.atmosphereMesh) {
+                    this.atmosphereMesh.material.uniforms.cameraPos.value.copy(cameraPos);
+                }
+
+                // Update distance model if needed
+                if (now - this.lastUpdateTime >= this.updateInterval &&
+                    !this.isRegenerating &&
+                    this.pendingUpdates.size > 0) {
+                    this.regenerateAffectedRegions();
+                    this.lastUpdateTime = now;
+                }
+            }
+
+            async regenerateAffectedRegions() {
+                if (this.isRegenerating) return;
+                this.isRegenerating = true;
+
+                console.log(`[DistanceModel] Regenerating ${this.pendingUpdates.size} chunks`);
+
+                const chunksToUpdate = Array.from(this.pendingUpdates);
+                this.pendingUpdates.clear();
+                this.dirtyChunks.clear();
+
+                await this.updateHeightmapFromChunks(chunksToUpdate);
+
+                this.isRegenerating = false;
+                this.lastUpdateTimestamp = Date.now();
+
+                const now = new Date();
+                document.getElementById('lastUpdate').textContent =
+                    now.toLocaleTimeString() + '.' + now.getMilliseconds();
+            }
+
+            async updateHeightmapFromChunks(chunkKeys) {
+                if (!this.heightmapTexture || !this.colorTexture) return;
+
+                const heightData = this.heightmapTexture.image.data;
+                const colorData = this.colorTexture.image.data;
+                const size = this.heightmapSize;
+
+                for (const chunkKey of chunkKeys) {
+                    const [cx, cy, cz] = chunkKey.split(',').map(Number);
+
+                    // Map chunk coordinates to heightmap region
+                    // Planet is centered at origin, chunks radiate outward
+                    const worldX = cx * this.chunkSize;
+                    const worldZ = cz * this.chunkSize;
+
+                    // Convert to sphere UV
+                    const dist = Math.sqrt(worldX * worldX + worldZ * worldZ);
+                    const angle = Math.atan2(worldZ, worldX);
+                    const u = (angle / (Math.PI * 2) + 0.5) % 1.0;
+                    const v = Math.abs(cy) / 10; // Latitude approximation
+
+                    const pixelX = Math.floor(u * size);
+                    const pixelY = Math.floor(v * size) % size;
+
+                    // Update region around this point with VERY VISIBLE changes
+                    const radius = 20; // Larger update radius
+                    for (let dy = -radius; dy <= radius; dy++) {
+                        for (let dx = -radius; dx <= radius; dx++) {
+                            const px = (pixelX + dx + size) % size;
+                            const py = Math.max(0, Math.min(size - 1, pixelY + dy));
+                            const index = py * size + px;
+
+                            // Add significant height variation
+                            const heightChange = (Math.random() - 0.5) * this.visualIntensity;
+                            heightData[index] += heightChange;
+
+                            // Update color dramatically
+                            const h = heightData[index];
+                            if (h < -5) {
+                                colorData[index * 3] = 200; // Bright red for testing
+                                colorData[index * 3 + 1] = 50;
+                                colorData[index * 3 + 2] = 50;
+                            } else if (h < 0) {
+                                colorData[index * 3] = 50;
+                                colorData[index * 3 + 1] = 200;
+                                colorData[index * 3 + 2] = 50;
+                            } else if (h < 10) {
+                                colorData[index * 3] = 250;
+                                colorData[index * 3 + 1] = 250;
+                                colorData[index * 3 + 2] = 50;
+                            } else {
+                                colorData[index * 3] = 50;
+                                colorData[index * 3 + 1] = 50;
+                                colorData[index * 3 + 2] = 250;
+                            }
+                        }
+                    }
+                }
+
+                this.heightmapTexture.needsUpdate = true;
+                this.colorTexture.needsUpdate = true;
+
+                console.log('[DistanceModel] Heightmap updated - VISIBLE CHANGES APPLIED');
+            }
+
+            setVisibility(visible) {
+                if (this.distanceMesh) this.distanceMesh.visible = visible;
+                if (this.cloudMesh) this.cloudMesh.visible = visible;
+                if (this.atmosphereMesh) this.atmosphereMesh.visible = visible;
+            }
+        }
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050510);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+        camera.position.set(0, 100, 400);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.position.set(500, 1000, 300);
+        scene.add(sunLight);
+
+        // Planet at gravitational center (origin)
+        const planet = {
+            radius: 150,
+            position: new THREE.Vector3(0, 0, 0) // Gravitational center
+        };
+
+        // Distance model
+        const distanceModel = new PlanetaryDistanceModel(planet, scene, {
+            chunkDirtyThreshold: 0.05,
+            updateInterval: 1000,
+            transitionDistance: 200,
+            visualIntensity: 10
+        });
+
+        // Voxel representation placeholder
+        const voxelChunks = new THREE.Group();
+        scene.add(voxelChunks);
+        voxelChunks.visible = false;
+
+        // Camera orbit
+        let cameraAngle = { theta: 0, phi: Math.PI / 4 };
+        let cameraDistance = 400;
+        let mouseDown = false;
+
+        document.addEventListener('mousedown', () => mouseDown = true);
+        document.addEventListener('mouseup', () => mouseDown = false);
+        document.addEventListener('mousemove', (e) => {
+            if (!mouseDown) return;
+            cameraAngle.theta -= e.movementX * 0.005;
+            cameraAngle.phi -= e.movementY * 0.005;
+            cameraAngle.phi = Math.max(0.1, Math.min(Math.PI - 0.1, cameraAngle.phi));
+        });
+        document.addEventListener('wheel', (e) => {
+            cameraDistance += e.deltaY * 0.3;
+            cameraDistance = Math.max(5, Math.min(2000, cameraDistance));
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+
+            if (key === 'b') {
+                // 50 random blocks
+                for (let i = 0; i < 50; i++) {
+                    const x = Math.floor(Math.random() * 200 - 100);
+                    const y = Math.floor(Math.random() * 50);
+                    const z = Math.floor(Math.random() * 200 - 100);
+                    distanceModel.onVoxelChange(x, y, z);
+                }
+                console.log('Added 50 random blocks');
+            }
+
+            if (key === 's') {
+                // Small building
+                const pos = new THREE.Vector3(
+                    Math.random() * 100 - 50,
+                    0,
+                    Math.random() * 100 - 50
+                );
+                distanceModel.onSchematicPlaced('small_' + Date.now(), {
+                    min: pos,
+                    max: pos.clone().add(new THREE.Vector3(10, 20, 10)),
+                    size: 10 * 20 * 10
+                });
+            }
+
+            if (key === 'l') {
+                // Large building
+                const pos = new THREE.Vector3(
+                    Math.random() * 100 - 50,
+                    0,
+                    Math.random() * 100 - 50
+                );
+                distanceModel.onSchematicPlaced('large_' + Date.now(), {
+                    min: pos,
+                    max: pos.clone().add(new THREE.Vector3(50, 80, 50)),
+                    size: 50 * 80 * 50
+                });
+            }
+
+            if (key === 'c') {
+                // City block
+                const pos = new THREE.Vector3(
+                    Math.random() * 100 - 50,
+                    0,
+                    Math.random() * 100 - 50
+                );
+                distanceModel.onSchematicPlaced('city_' + Date.now(), {
+                    min: pos,
+                    max: pos.clone().add(new THREE.Vector3(100, 100, 100)),
+                    size: 100 * 100 * 100
+                });
+            }
+        });
+
+        // UI Controls
+        document.getElementById('dirtyThreshold').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            distanceModel.chunkDirtyThreshold = val;
+            document.getElementById('dirtyThresholdVal').textContent = (val * 100).toFixed(0) + '%';
+        });
+
+        document.getElementById('updateInterval').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            distanceModel.updateInterval = val;
+            document.getElementById('updateIntervalVal').textContent = val + 'ms';
+        });
+
+        document.getElementById('visualIntensity').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            distanceModel.visualIntensity = val;
+            document.getElementById('visualIntensityVal').textContent = val + 'x';
+        });
+
+        document.getElementById('viewOrbit').addEventListener('click', () => { cameraDistance = 500; });
+        document.getElementById('viewApproach').addEventListener('click', () => { cameraDistance = 200; });
+        document.getElementById('viewClose').addEventListener('click', () => { cameraDistance = 50; });
+        document.getElementById('viewSurface').addEventListener('click', () => { cameraDistance = 5; });
+
+        document.getElementById('placeSmall').addEventListener('click', () => {
+            const pos = new THREE.Vector3(Math.random() * 100 - 50, 0, Math.random() * 100 - 50);
+            distanceModel.onSchematicPlaced('small_' + Date.now(), {
+                min: pos,
+                max: pos.clone().add(new THREE.Vector3(10, 20, 10)),
+                size: 10 * 20 * 10
+            });
+        });
+
+        document.getElementById('placeLarge').addEventListener('click', () => {
+            const pos = new THREE.Vector3(Math.random() * 100 - 50, 0, Math.random() * 100 - 50);
+            distanceModel.onSchematicPlaced('large_' + Date.now(), {
+                min: pos,
+                max: pos.clone().add(new THREE.Vector3(50, 80, 50)),
+                size: 50 * 80 * 50
+            });
+        });
+
+        document.getElementById('placeCity').addEventListener('click', () => {
+            const pos = new THREE.Vector3(Math.random() * 100 - 50, 0, Math.random() * 100 - 50);
+            distanceModel.onSchematicPlaced('city_' + Date.now(), {
+                min: pos,
+                max: pos.clone().add(new THREE.Vector3(100, 100, 100)),
+                size: 100 * 100 * 100
+            });
+        });
+
+        document.getElementById('addTerrain').addEventListener('click', () => {
+            for (let i = 0; i < 50; i++) {
+                const x = Math.floor(Math.random() * 200 - 100);
+                const y = Math.floor(Math.random() * 50);
+                const z = Math.floor(Math.random() * 200 - 100);
+                distanceModel.onVoxelChange(x, y, z);
+            }
+        });
+
+        document.getElementById('forceUpdate').addEventListener('click', () => {
+            distanceModel.scheduleImmediateUpdate(distanceModel.dirtyChunks);
+            distanceModel.regenerateAffectedRegions();
+        });
+
+        // Animation
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fpsTime = 0;
+
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+
+            const deltaTime = (currentTime - lastTime) * 0.001;
+            lastTime = currentTime;
+
+            frameCount++;
+            fpsTime += deltaTime;
+            if (fpsTime >= 1.0) {
+                document.getElementById('fpsVal').textContent = Math.round(frameCount / fpsTime);
+                frameCount = 0;
+                fpsTime = 0;
+            }
+
+            // Orbit camera
+            const targetPos = planet.position;
+            camera.position.set(
+                targetPos.x + cameraDistance * Math.sin(cameraAngle.phi) * Math.sin(cameraAngle.theta),
+                targetPos.y + cameraDistance * Math.cos(cameraAngle.phi),
+                targetPos.z + cameraDistance * Math.sin(cameraAngle.phi) * Math.cos(cameraAngle.theta)
+            );
+            camera.lookAt(targetPos);
+
+            const distanceFromPlanet = camera.position.distanceTo(targetPos);
+            document.getElementById('distanceVal').textContent = Math.round(distanceFromPlanet);
+
+            const useDistanceModel = distanceFromPlanet > distanceModel.transitionDistance;
+            distanceModel.setVisibility(useDistanceModel);
+            voxelChunks.visible = !useDistanceModel;
+
+            document.getElementById('renderMode').textContent = useDistanceModel ? 'Distance Mesh' : 'Voxel Chunks';
+            document.getElementById('pendingUpdates').textContent = distanceModel.pendingUpdates.size;
+
+            distanceModel.update(deltaTime, camera.position);
+            renderer.render(scene, camera);
+        }
+
+        animate(performance.now());
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
