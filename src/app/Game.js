@@ -57,10 +57,10 @@ export class Game {
     setupRenderer() {
         this.scene.background = new THREE.Color(0x000510);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
-        
+        // Start above planet surface, looking toward horizon
         this.camera.position.set(0, 155, 0);
-        
-        this.camera.lookAt(0, 155, -10);
+        // Look toward horizon (tangent to sphere)
+        this.camera.lookAt(0, 150, -150);
     }
 
     setupOrbitalSystem() {
@@ -83,8 +83,8 @@ export class Game {
             name: 'Terra',
             radius: this.planetRadius,
             position: { x: 0, y: 0, z: 0 },
-            orbitRadius: 400,
-            orbitSpeed: 0.1,
+            orbitRadius: 0,  // No orbit - planet is stationary for FPS mode
+            orbitSpeed: 0,
             rotationSpeed: 0.05,
             rotationTilt: 0.4,
             claimOwner: null
@@ -288,11 +288,7 @@ export class Game {
 
         this.updateScene();
 
-        if (this.planetMesh) {
-            this.planetContainer.remove(this.planetMesh);
-            MeshFactory.disposeMesh(this.planetMesh);
-            this.planetMesh = null;
-        }
+        // Keep planet impostor visible - shader will cull where voxel chunks exist
     }
 
     loadStarVoxels() {
