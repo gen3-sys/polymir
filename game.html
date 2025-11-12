@@ -82,12 +82,26 @@
 
     <script type="module">
         import { Game } from './src/app/Game.js';
+        import { UniverseCreationModal } from './src/ui/UniverseCreationModal.js';
 
         const canvas = document.getElementById('canvas');
         const game = new Game(canvas);
 
+        // Create universe creation modal
+        const universeModal = new UniverseCreationModal(game);
+        window.universeModal = universeModal;
+
+        // Show modal on 'U' key press
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'u' || e.key === 'U') {
+                universeModal.show();
+            }
+        });
+
         game.start();
         game.initialize();
+
+        console.log('Press U to open Universe Creation Modal');
     </script>
 </body>
 </html>
