@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POLYMIR - Game</title>
+    <link rel="icon" type="image/svg+xml" href="polymir_logo.svg">
     <style>
         body { margin: 0; overflow: hidden; }
         #info {
@@ -58,9 +59,18 @@
             font-size: 12px;
             color: rgba(200, 220, 255, 0.9);
         }
+        @keyframes twinkle {
+            0%, 100% { opacity: inherit; }
+            50% { opacity: 0.3; }
+        }
+        @keyframes drift {
+            from { transform: translateX(0); }
+            to { transform: translateX(-100px); }
+        }
     </style>
 </head>
 <body>
+    <div id="starfield-layer" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -2; pointer-events: none; background: #000033;"></div>
     <div id="info">
         FPS: <span id="fps">0</span> | Memory: <span id="memory">0</span> MB<br>
         Scroll to zoom, drag to rotate<br>
@@ -85,23 +95,51 @@
         import { UniverseCreationModal } from './src/ui/UniverseCreationModal.js';
 
         const canvas = document.getElementById('canvas');
-        const game = new Game(canvas);
+        canvas.style.display = 'none';
 
-        // Create universe creation modal
+        function createStarfield() {
+            const container = document.getElementById('starfield-layer');
+            if (!container) return;
+
+            for (let layer = 0; layer < 3; layer++) {
+                const starsDiv = document.createElement('div');
+                starsDiv.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%;';
+
+                const starCount = 150 - (layer * 40);
+                for (let i = 0; i < starCount; i++) {
+                    const star = document.createElement('div');
+                    const size = Math.random() * (3 - layer) + 0.5;
+                    const x = Math.random() * 100;
+                    const y = Math.random() * 100;
+                    const brightness = Math.random() * 0.5 + 0.5;
+
+                    star.style.cssText = `
+                        position: absolute;
+                        left: ${x}%;
+                        top: ${y}%;
+                        width: ${size}px;
+                        height: ${size}px;
+                        background: white;
+                        border-radius: 50%;
+                        opacity: ${brightness};
+                        animation: twinkle ${2 + Math.random() * 3}s infinite ${Math.random() * 5}s;
+                    `;
+
+                    starsDiv.appendChild(star);
+                }
+
+                starsDiv.style.animation = `drift ${60 + layer * 20}s linear infinite`;
+                container.appendChild(starsDiv);
+            }
+        }
+
+        createStarfield();
+
+        const game = new Game(canvas);
         const universeModal = new UniverseCreationModal(game);
         window.universeModal = universeModal;
 
-        // Show modal on 'U' key press
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'u' || e.key === 'U') {
-                universeModal.show();
-            }
-        });
-
-        game.start();
-        game.initialize();
-
-        console.log('Press U to open Universe Creation Modal');
+        universeModal.show();
     </script>
 </body>
 </html>
