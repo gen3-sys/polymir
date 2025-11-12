@@ -1,14 +1,5 @@
-/**
- * POLYMIR V3 - Universe Creation Modal
- *
- * Complete universe creation interface ported from V3 with:
- * - Planet customization
- * - Biome settings
- * - Terrain painter integration
- * - Schematic library
- *
- * Ported from mirror_engine V3 to new polymir engine
- */
+import * as THREE from '../lib/three.module.js';
+import { SparklesSystem } from './SparklesSystem.js';
 
 export class UniverseCreationModal {
     constructor(engine) {
@@ -18,11 +9,15 @@ export class UniverseCreationModal {
         this.currentSystem = null;
         this.planetCustomizers = new Map();
         this.useGlobalDefaults = true;
+        this.previewCanvas = null;
+        this.previewRenderer = null;
+        this.previewAnimating = false;
+        this.sparklesCanvas = null;
+        this.sparklesSystem = null;
 
-        // Make accessible globally for UI buttons
         window.universeCreation = this;
+        window.systemGenerator = this;
 
-        // Settings
         this.settings = {
             systemType: 'standard',
             seed: Math.floor(Math.random() * 1000000),
@@ -33,7 +28,6 @@ export class UniverseCreationModal {
             enableAsteroids: true
         };
 
-        // Global defaults for planets
         this.globalDefaults = {
             temperature: 'temperate',
             gravity: 1.0,
@@ -48,13 +42,9 @@ export class UniverseCreationModal {
             structureTags: ['alien_ruins', 'settlement']
         };
 
-        // Loading indicator
         this.loadingIndicator = null;
     }
 
-    /**
-     * Show loading indicator
-     */
     showLoadingIndicator(message = 'Loading...') {
         if (this.loadingIndicator) {
             this.loadingIndicator.remove();
@@ -72,7 +62,7 @@ export class UniverseCreationModal {
             border-radius: 10px;
             font-family: monospace;
             font-size: 16px;
-            z-index: 10000;
+            z-index: 10001;
             text-align: center;
         `;
         this.loadingIndicator.innerHTML = `
@@ -82,7 +72,6 @@ export class UniverseCreationModal {
             </div>
         `;
 
-        // Add CSS animation
         const style = document.createElement('style');
         style.textContent = `
             @keyframes loading {
@@ -95,9 +84,6 @@ export class UniverseCreationModal {
         document.body.appendChild(this.loadingIndicator);
     }
 
-    /**
-     * Hide loading indicator
-     */
     hideLoadingIndicator() {
         if (this.loadingIndicator) {
             this.loadingIndicator.remove();
@@ -105,30 +91,58 @@ export class UniverseCreationModal {
         }
     }
 
-    /**
-     * Show the menu
-     */
     show() {
+        if (!this.sparklesSystem) {
+            this.createSparklesBackground();
+        }
+
         if (!this.menuElement) {
             this.createMenu();
             this.setupKeyboardHandlers();
         }
 
+        if (this.sparklesCanvas) {
+            this.sparklesCanvas.style.display = 'block';
+        }
+        if (this.sparklesSystem) {
+            this.sparklesSystem.resume();
+        }
+
         this.menuElement.style.display = 'block';
     }
 
-    /**
-     * Hide the menu
-     */
+    createSparklesBackground() {
+        if (this.sparklesCanvas) return;
+
+        this.sparklesCanvas = document.createElement('canvas');
+        this.sparklesCanvas.id = 'universe-modal-sparkles';
+        this.sparklesCanvas.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9998;
+            pointer-events: none;
+        `;
+
+        document.body.appendChild(this.sparklesCanvas);
+        this.sparklesSystem = new SparklesSystem(this.sparklesCanvas);
+    }
+
     hide() {
         if (this.menuElement) {
             this.menuElement.style.display = 'none';
         }
+        if (this.sparklesCanvas) {
+            this.sparklesCanvas.style.display = 'none';
+        }
+        if (this.sparklesSystem) {
+            this.sparklesSystem.pause();
+        }
+        this.previewAnimating = false;
     }
 
-    /**
-     * Setup keyboard event handlers
-     */
     setupKeyboardHandlers() {
         this.escapeHandler = (e) => {
             if (e.key === 'Escape') {
@@ -138,11 +152,7 @@ export class UniverseCreationModal {
         document.addEventListener('keydown', this.escapeHandler);
     }
 
-    /**
-     * Create the enhanced menu - EXACT V3 UI
-     */
     createMenu() {
-        // Remove any existing menu first
         const existingMenu = document.getElementById('universe-creation-modal');
         if (existingMenu) {
             existingMenu.remove();
@@ -171,7 +181,6 @@ export class UniverseCreationModal {
             box-shadow: none;
         `;
 
-        // Header
         const header = document.createElement('div');
         header.style.cssText = 'padding: 10px; border-bottom: 2px solid #ff0088; display: flex; justify-content: space-between; align-items: center;';
         header.innerHTML = `
@@ -191,7 +200,6 @@ export class UniverseCreationModal {
             <div style="width: 100px;"></div>
         `;
 
-        // Tab Navigation
         const tabNav = document.createElement('div');
         tabNav.style.cssText = 'display: flex; background: rgba(255, 0, 136, 0.1); border-bottom: 2px solid #ff0088;';
         tabNav.innerHTML = `
@@ -206,12 +214,10 @@ export class UniverseCreationModal {
             </button>
         `;
 
-        // Content Container
         const content = document.createElement('div');
         content.id = 'tab-content';
         content.style.cssText = 'flex: 1; overflow: visible; padding: 12px; position: relative;';
 
-        // Assemble menu
         menu.appendChild(header);
         menu.appendChild(tabNav);
         menu.appendChild(content);
@@ -219,29 +225,21 @@ export class UniverseCreationModal {
         document.body.appendChild(menu);
         this.menuElement = menu;
 
-        // Initialize with system tab after DOM is ready
         setTimeout(() => {
             this.showSystemTab();
             this.attachEventListeners();
         }, 0);
     }
 
-    /**
-     * Show system configuration tab
-     */
     showSystemTab() {
         const content = document.getElementById('tab-content');
         content.innerHTML = this.getSystemTabHTML();
         this.attachSystemTabListeners();
     }
 
-    /**
-     * Get system tab HTML
-     */
     getSystemTabHTML() {
         return `
             <div style="display: flex; gap: 15px; height: 100%;">
-                <!-- Left Sidebar - Controls -->
                 <div style="width: 300px; background: rgba(0, 255, 255, 0.05); padding: 15px; border-radius: 8px; overflow-y: auto;">
                     <h3 style="color: #00FFFF; margin-bottom: 15px; font-size: 14px;">SYSTEM SETTINGS</h3>
 
@@ -287,7 +285,7 @@ export class UniverseCreationModal {
                         cursor: pointer;
                         box-shadow: 0 0 15px rgba(255, 0, 136, 0.5);
                         margin-bottom: 10px;
-                    ">🌌 GENERATE SYSTEM</button>
+                    ">GENERATE SYSTEM</button>
 
                     <button id="start-exploration-btn" style="
                         width: 100%;
@@ -300,23 +298,16 @@ export class UniverseCreationModal {
                         font-weight: bold;
                         cursor: pointer;
                         box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
-                        display: none;
-                    ">▶ START EXPLORATION</button>
+                    ">START EXPLORATION</button>
                 </div>
 
-                <!-- Right Panel - Preview -->
-                <div style="flex: 1; background: rgba(0, 0, 0, 0.3); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 500px;">
-                    <div id="system-preview" style="color: #888; font-size: 14px;">
-                        Generate a system to see preview
-                    </div>
+                <div style="flex: 1; background: rgba(0, 0, 0, 0.3); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 500px; position: relative; overflow: hidden;">
+                    <canvas id="system-preview-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
                 </div>
             </div>
         `;
     }
 
-    /**
-     * Attach event listeners for system tab
-     */
     attachSystemTabListeners() {
         const planetCountSlider = document.getElementById('planet-count');
         const planetCountValue = document.getElementById('planet-count-value');
@@ -337,16 +328,73 @@ export class UniverseCreationModal {
         if (startBtn) {
             startBtn.addEventListener('click', () => this.startExploration());
         }
+
+        this.setupPreviewRenderer();
     }
 
-    /**
-     * Show biome structures tab
-     */
+    setupPreviewRenderer() {
+        this.previewCanvas = document.getElementById('system-preview-canvas');
+        if (!this.previewCanvas) return;
+
+        const parent = this.previewCanvas.parentElement;
+        const width = parent.clientWidth;
+        const height = parent.clientHeight;
+
+        if (this.previewRenderer) {
+            this.previewRenderer.setSize(width, height);
+        } else {
+            this.previewRenderer = new THREE.WebGLRenderer({ canvas: this.previewCanvas, antialias: true, alpha: true });
+            this.previewRenderer.setSize(width, height);
+        }
+
+        // Create the loading animation if it doesn't exist
+        if (!this.engine.loadingAnimation) {
+            import('../rendering/LoadingAnimation.js').then(module => {
+                const LoadingAnimation = module.LoadingAnimation;
+                this.engine.loadingAnimation = new LoadingAnimation(
+                    this.previewRenderer,
+                    null,
+                    { rotationSpeed: 0.05, rotationTilt: 0.4 }
+                );
+                // Make planets visible immediately for preview (not waiting for loading)
+                this.engine.loadingAnimation.planet.visible = true;
+                this.engine.loadingAnimation.orbitPath.visible = true;
+            });
+        }
+
+        if (!this.previewAnimating) {
+            this.previewAnimating = true;
+            this.animatePreview();
+        }
+    }
+
+    animatePreview() {
+        if (!this.previewAnimating || !this.menuElement || this.menuElement.style.display === 'none') {
+            this.previewAnimating = false;
+            return;
+        }
+
+        if (this.engine.loadingAnimation && this.previewRenderer) {
+            const deltaTime = 0.016;
+
+            // Update the loading animation (rotates sun, orbits planet, updates shaders)
+            this.engine.loadingAnimation.update(deltaTime, 0, 0, '');
+
+            // Render the scene with sun and orbiting planet
+            this.previewRenderer.render(
+                this.engine.loadingAnimation.scene,
+                this.engine.loadingAnimation.camera
+            );
+        }
+
+        requestAnimationFrame(() => this.animatePreview());
+    }
+
     showBiomesTab() {
         const content = document.getElementById('tab-content');
         content.innerHTML = `
             <div style="padding: 10px;">
-                <h2 style="color: #FFD700; margin-bottom: 10px; font-size: 14px;">🌍 Biome Structure Configuration</h2>
+                <h2 style="color: #FFD700; margin-bottom: 10px; font-size: 14px;">BIOME STRUCTURE CONFIGURATION</h2>
 
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px;">
                     ${this.getBiomeCards()}
@@ -355,9 +403,6 @@ export class UniverseCreationModal {
         `;
     }
 
-    /**
-     * Get biome cards HTML
-     */
     getBiomeCards() {
         const biomes = ['desert', 'forest', 'ocean', 'grassland', 'mountains', 'tundra'];
         return biomes.map(biome => `
@@ -376,34 +421,25 @@ export class UniverseCreationModal {
         `).join('');
     }
 
-    /**
-     * Show schematic library tab
-     */
     showLibraryTab() {
         const content = document.getElementById('tab-content');
         content.innerHTML = `
             <div style="text-align: center; padding: 50px; color: #FFD700;">
-                <h2>📚 Schematic Library</h2>
+                <h2>SCHEMATIC LIBRARY</h2>
                 <p style="color: #888; margin-top: 10px;">Coming soon - browse and import .mvox schematics</p>
             </div>
         `;
     }
 
-    /**
-     * Attach global event listeners
-     */
     attachEventListeners() {
-        // Back button
         const backBtn = document.getElementById('back-to-menu-btn');
         if (backBtn) {
             backBtn.addEventListener('click', () => this.hide());
         }
 
-        // Tab buttons
         const tabBtns = document.querySelectorAll('.tab-btn');
         tabBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                // Update active state
                 tabBtns.forEach(b => {
                     b.style.background = 'transparent';
                     b.classList.remove('active');
@@ -411,7 +447,6 @@ export class UniverseCreationModal {
                 btn.style.background = 'rgba(255, 0, 136, 0.2)';
                 btn.classList.add('active');
 
-                // Show correct tab
                 const tab = btn.dataset.tab;
                 this.currentTab = tab;
 
@@ -426,61 +461,29 @@ export class UniverseCreationModal {
         });
     }
 
-    /**
-     * Generate system
-     */
     async generateSystem() {
         this.showLoadingIndicator('Generating system...');
 
-        // TODO: Wire to actual voxel engine generation
-        console.log('🌌 Generating system with settings:', this.settings);
-
-        // Simulate generation
         await new Promise(resolve => setTimeout(resolve, 1500));
 
-        // Update preview
-        const preview = document.getElementById('system-preview');
-        if (preview) {
-            preview.innerHTML = `
-                <div style="color: #00FFFF;">
-                    <h3 style="margin-bottom: 15px;">System Generated!</h3>
-                    <p style="color: #888; font-size: 12px;">Seed: ${this.settings.seed}</p>
-                    <p style="color: #888; font-size: 12px;">Planets: ${this.settings.planetCount}</p>
-                </div>
-            `;
-        }
-
-        // Show start button
-        const startBtn = document.getElementById('start-exploration-btn');
-        if (startBtn) {
-            startBtn.style.display = 'block';
-        }
-
         this.hideLoadingIndicator();
-        this.currentSystem = { planets: [] }; // Placeholder
+        this.currentSystem = { planets: [] };
     }
 
-    /**
-     * Start exploration
-     */
-    startExploration() {
-        console.log('▶ Starting exploration...');
+    async startExploration() {
         this.hide();
-        // TODO: Wire to engine start
+        this.previewAnimating = false;
+
+        document.getElementById('canvas').style.display = 'block';
+
+        this.engine.start();
+        await this.engine.initialize();
     }
 
-    /**
-     * Open terrain painter for biome
-     */
     openTerrainPainter(biome) {
-        console.log(`🎨 Opening terrain painter for: ${biome}`);
-        // TODO: Open terrain painter modal
         alert(`Terrain painter for ${biome} - Coming soon!`);
     }
 
-    /**
-     * Cleanup
-     */
     dispose() {
         if (this.escapeHandler) {
             document.removeEventListener('keydown', this.escapeHandler);
