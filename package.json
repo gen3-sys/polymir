@@ -1,0 +1,30 @@
+{
+  "name": "polymir",
+  "version": "1.0.0-alpha",
+  "description": "Scale-Invariant Voxel Universe Engine",
+  "type": "module",
+  "scripts": {
+    "dev": "python -m http.server 8000",
+    "serve": "npx serve .",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/polymir.git"
+  },
+  "keywords": [
+    "voxel",
+    "webgl",
+    "procedural-generation",
+    "game-engine",
+    "three.js"
+  ],
+  "author": "Mary",
+  "license": "AGPL-3.0",
+  "devDependencies": {
+    "serve": "^14.2.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
