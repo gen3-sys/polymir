@@ -25,6 +25,26 @@ class SystemGeneratorMenuEnhanced {
 
         this.clusterSystems = [];
         this.superclusterViewActive = false;
+        this.superclusterAdvancedOpen = false;
+
+        this.superclusterConfig = {
+            name: 'Laniakea',
+            proceduralEnabled: true,
+            starCount: 1000,
+            galaxyCount: 10,
+            proceduralSettings: {
+                minPlanets: 2,
+                maxPlanets: 8,
+                ringworldChance: 0.05,
+                ringworldsHavePlanets: false,
+                moonChance: 0.3,
+                chaos: 0.5,
+                allowedBiomes: ['temperate', 'ice', 'desert', 'ocean', 'volcanic', 'toxic'],
+                bannedBiomes: [],
+                terrainVariety: 0.7,
+                structureDensity: 0.5
+            }
+        };
 
         window.systemGenerator = this;
         window.systemMenu = this;
@@ -382,48 +402,206 @@ class SystemGeneratorMenuEnhanced {
             `).join('');
 
             superclusterContent.innerHTML = `
-                <!-- Supercluster Properties -->
-                <div style="background: rgba(0, 100, 200, 0.1); border: 2px solid #00FFFF; border-radius: 10px; padding: 15px; margin-bottom: 20px;">
-                    <h3 style="color: #00FFFF; margin: 0 0 10px 0; font-size: 13px;">Supercluster Properties</h3>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
-                        <div>
-                            <label style="color: #888; display: block; margin-bottom: 5px; font-size: 10px;">Name</label>
-                            <input type="text" value="Laniakea" style="
-                                width: 100%;
-                                padding: 6px;
-                                background: rgba(0, 0, 0, 0.5);
-                                color: #00FF00;
-                                border: 1px solid #00FF00;
-                                border-radius: 4px;
-                                font-size: 11px;
-                            ">
-                        </div>
-                        <div>
-                            <label style="color: #888; display: block; margin-bottom: 5px; font-size: 10px;">Systems in Cluster</label>
-                            <input type="number" value="${this.clusterSystems.length}" readonly style="
-                                width: 100%;
-                                padding: 6px;
-                                background: rgba(0, 0, 0, 0.7);
-                                color: #FFD700;
-                                border: 1px solid #00FF00;
-                                border-radius: 4px;
-                                font-size: 11px;
-                            ">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Systems Grid -->
-                <h3 style="color: #FE0089; margin: 0 0 10px 0; font-size: 13px;">Systems in Cluster (${this.clusterSystems.length})</h3>
                 <div style="
                     display: grid;
                     grid-template-columns: repeat(5, 180px);
                     gap: 30px;
                     align-items: start;
                 ">
+                    <!-- Ghost div to skip space under sidebar -->
+                    <div style="visibility: hidden;"></div>
+
+                    <!-- Supercluster Properties Card -->
+                    <div class="planet-tile" style="
+                        border-color: #00FFFF;
+                        grid-column: span 3;
+                        border-radius: 0 8px 8px 0;
+                    ">
+                        <div style="color: #00FFFF; font-size: 13px; font-weight: bold; margin-bottom: 8px; text-align: center;">
+                            Supercluster Configuration
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 8px;">
+                            <div>
+                                <label style="color: #888; display: block; margin-bottom: 3px; font-size: 9px;">Name</label>
+                                <input type="text" value="${this.superclusterConfig.name}" class="polymir-input" style="
+                                    width: 100%;
+                                    padding: 4px;
+                                    font-size: 10px;
+                                " onchange="window.systemGenerator.superclusterConfig.name = this.value">
+                            </div>
+                            <div>
+                                <label style="color: #888; display: block; margin-bottom: 3px; font-size: 9px;">Systems Count</label>
+                                <input type="number" value="${this.clusterSystems.length}" readonly class="polymir-input" style="
+                                    width: 100%;
+                                    padding: 4px;
+                                    font-size: 10px;
+                                    color: #FFD700;
+                                    background: rgba(0, 0, 0, 0.5);
+                                ">
+                            </div>
+                        </div>
+
+                        <!-- Advanced Toggle -->
+                        <div onclick="window.systemGenerator.toggleSuperclusterAdvanced()" style="
+                            color: #FE0089;
+                            font-size: 10px;
+                            text-align: center;
+                            padding: 6px;
+                            border-top: 1px solid rgba(0, 255, 255, 0.2);
+                            cursor: pointer;
+                            transition: all 0.2s;
+                            user-select: none;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='transparent'">
+                            <span style="margin-right: 4px;">${this.superclusterAdvancedOpen ? '▼' : '▶'}</span>
+                            Advanced Configuration
+                        </div>
+
+                        <!-- Advanced Panel -->
+                        <div id="supercluster-advanced-panel" style="display: ${this.superclusterAdvancedOpen ? 'block' : 'none'}; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0, 255, 255, 0.2);">
+                            <!-- Procedural Generation Toggle -->
+                            <label style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; cursor: pointer;">
+                                <input type="checkbox" ${this.superclusterConfig.proceduralEnabled ? 'checked' : ''}
+                                       onchange="window.systemGenerator.toggleProceduralGeneration(this.checked)">
+                                <span style="color: #00FF00; font-size: 10px; font-weight: bold;">Enable Procedural Generation</span>
+                            </label>
+
+                            <div id="procedural-settings" style="display: ${this.superclusterConfig.proceduralEnabled ? 'block' : 'none'};">
+                                <!-- Star Distribution -->
+                                <div style="display: grid; grid-template-columns: auto 70px auto 70px; gap: 6px; align-items: center; margin-bottom: 8px;">
+                                    <label style="color: #888; font-size: 9px; white-space: nowrap;">Stars</label>
+                                    <input type="number" value="${this.superclusterConfig.starCount}" min="100" max="100000" class="polymir-input" style="
+                                        padding: 4px;
+                                        font-size: 9px;
+                                    " onchange="window.systemGenerator.superclusterConfig.starCount = parseInt(this.value)">
+                                    <label style="color: #888; font-size: 9px; white-space: nowrap;">Galaxies</label>
+                                    <input type="number" value="${this.superclusterConfig.galaxyCount}" min="1" max="100" class="polymir-input" style="
+                                        padding: 4px;
+                                        font-size: 9px;
+                                    " onchange="window.systemGenerator.superclusterConfig.galaxyCount = parseInt(this.value)">
+                                </div>
+
+                                <!-- Planet Generation Settings -->
+                                <div style="background: rgba(0, 0, 0, 0.3); padding: 6px; border-radius: 4px; margin-bottom: 8px;">
+                                    <div style="color: #6B8AFF; font-size: 9px; font-weight: bold; margin-bottom: 6px;">Planet Generation</div>
+
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
+                                        <div>
+                                            <label style="color: #888; font-size: 8px;">Min Planets</label>
+                                            <input type="number" value="${this.superclusterConfig.proceduralSettings.minPlanets}" min="0" max="20" class="polymir-input" style="
+                                                width: 100%;
+                                                padding: 2px;
+                                                font-size: 9px;
+                                            " onchange="window.systemGenerator.superclusterConfig.proceduralSettings.minPlanets = parseInt(this.value)">
+                                        </div>
+                                        <div>
+                                            <label style="color: #888; font-size: 8px;">Max Planets</label>
+                                            <input type="number" value="${this.superclusterConfig.proceduralSettings.maxPlanets}" min="1" max="20" class="polymir-input" style="
+                                                width: 100%;
+                                                padding: 2px;
+                                                font-size: 9px;
+                                            " onchange="window.systemGenerator.superclusterConfig.proceduralSettings.maxPlanets = parseInt(this.value)">
+                                        </div>
+                                    </div>
+
+                                    <!-- Ringworld Settings -->
+                                    <div style="margin-bottom: 6px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                            <label style="color: #888; font-size: 8px;">Ringworld Chance</label>
+                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.ringworldChance * 100)}%</span>
+                                        </div>
+                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.ringworldChance * 100}" min="0" max="100" step="1" class="polymir-input" style="
+                                            width: 100%;
+                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.ringworldChance = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                    </div>
+
+                                    <div style="margin-bottom: 6px;">
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                            <input type="checkbox" ${this.superclusterConfig.proceduralSettings.ringworldsHavePlanets ? 'checked' : ''}
+                                                   onchange="window.systemGenerator.superclusterConfig.proceduralSettings.ringworldsHavePlanets = this.checked">
+                                            <span style="color: #888; font-size: 8px;">Ringworlds have planets</span>
+                                        </label>
+                                    </div>
+
+                                    <!-- Moon Chance -->
+                                    <div style="margin-bottom: 6px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                            <label style="color: #888; font-size: 8px;">Moon Chance</label>
+                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.moonChance * 100)}%</span>
+                                        </div>
+                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.moonChance * 100}" min="0" max="100" step="1" class="polymir-input" style="
+                                            width: 100%;
+                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.moonChance = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                    </div>
+
+                                    <!-- Chaos -->
+                                    <div style="margin-bottom: 6px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                            <label style="color: #888; font-size: 8px;">Chaos</label>
+                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.chaos * 100)}%</span>
+                                        </div>
+                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.chaos * 100}" min="0" max="100" step="1" class="polymir-input" style="
+                                            width: 100%;
+                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.chaos = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                    </div>
+
+                                    <!-- Terrain Variety -->
+                                    <div style="margin-bottom: 6px;">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                            <label style="color: #888; font-size: 8px;">Terrain Variety</label>
+                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.terrainVariety * 100)}%</span>
+                                        </div>
+                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.terrainVariety * 100}" min="0" max="100" step="1" class="polymir-input" style="
+                                            width: 100%;
+                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.terrainVariety = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                    </div>
+
+                                    <!-- Structure Density -->
+                                    <div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                            <label style="color: #888; font-size: 8px;">Structure Density</label>
+                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.structureDensity * 100)}%</span>
+                                        </div>
+                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.structureDensity * 100}" min="0" max="100" step="1" class="polymir-input" style="
+                                            width: 100%;
+                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.structureDensity = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                    </div>
+                                </div>
+
+                                <!-- Biome Filters -->
+                                <div style="background: rgba(0, 0, 0, 0.3); padding: 6px; border-radius: 4px;">
+                                    <div style="color: #6B8AFF; font-size: 9px; font-weight: bold; margin-bottom: 4px;">Biome Filters</div>
+                                    <div style="font-size: 8px; color: #888; margin-bottom: 4px;">
+                                        Click to ban biomes from generation
+                                    </div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                        ${['temperate', 'ice', 'desert', 'ocean', 'volcanic', 'toxic'].map(biome => {
+                                            const isBanned = this.superclusterConfig.proceduralSettings.bannedBiomes.includes(biome);
+                                            return `
+                                                <button onclick="window.systemGenerator.toggleBannedBiome('${biome}')" style="
+                                                    padding: 2px 6px;
+                                                    font-size: 8px;
+                                                    background: ${isBanned ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)'};
+                                                    color: ${isBanned ? '#FF0000' : '#00FF00'};
+                                                    border: 1px solid ${isBanned ? '#FF0000' : '#00FF00'};
+                                                    border-radius: 3px;
+                                                    cursor: pointer;
+                                                    transition: all 0.2s;
+                                                " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='${isBanned ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)'}'">
+                                                    ${isBanned ? '✗' : '✓'} ${biome}
+                                                </button>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Systems Cards -->
                     ${this.clusterSystems.length > 0
                         ? systemCards
-                        : '<p style="color: #888; grid-column: 1 / -1;">No systems added to cluster yet. Use "Add to Cluster" to save systems.</p>'
+                        : '<div style="grid-column: span 2; color: #888; font-size: 10px; text-align: center; padding: 40px;">No systems added yet.<br>Use "Add to Cluster" to save systems.</div>'
                     }
                 </div>
             `;
@@ -431,6 +609,34 @@ class SystemGeneratorMenuEnhanced {
             planetCardsContainer.style.display = 'block';
             superclusterContainer.style.display = 'none';
         }
+    }
+
+    toggleSuperclusterAdvanced() {
+        this.superclusterAdvancedOpen = !this.superclusterAdvancedOpen;
+        this.toggleSuperclusterView();
+        this.toggleSuperclusterView();
+    }
+
+    toggleProceduralGeneration(enabled) {
+        this.superclusterConfig.proceduralEnabled = enabled;
+        const proceduralSettings = document.getElementById('procedural-settings');
+        if (proceduralSettings) {
+            proceduralSettings.style.display = enabled ? 'block' : 'none';
+        }
+    }
+
+    toggleBannedBiome(biome) {
+        const bannedBiomes = this.superclusterConfig.proceduralSettings.bannedBiomes;
+        const index = bannedBiomes.indexOf(biome);
+
+        if (index > -1) {
+            bannedBiomes.splice(index, 1);
+        } else {
+            bannedBiomes.push(biome);
+        }
+
+        this.toggleSuperclusterView();
+        this.toggleSuperclusterView();
     }
 
     updatePreviewForMode() {
@@ -835,7 +1041,8 @@ class SystemGeneratorMenuEnhanced {
             transform: translate(-50%, -50%);
             width: 85vw;
             max-width: 1200px;
-            height: 90vh;
+            height: 95vh;
+            max-height: 1200px;
             background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(10, 10, 40, 0.95) 100%);
             border: 2px solid #FE0089;
             border-radius: 10px;

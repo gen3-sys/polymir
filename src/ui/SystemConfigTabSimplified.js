@@ -859,7 +859,7 @@ export class SystemConfigTabSimplified {
                         </div>
 
                         <!-- Supercluster Configuration (hidden by default) -->
-                        <div id="supercluster-config-container" style="position: absolute; top: 340px; left: 0; right: -110px; bottom: -100px; z-index: 10; display: none; padding: 20px; overflow-y: auto;">
+                        <div id="supercluster-config-container" style="position: absolute; top: 340px; left: 0; right: -110px; bottom: -300px; z-index: 10; display: none; overflow-y: auto;">
                             <div id="supercluster-content" style="color: white;">
                                 <!-- Supercluster content will be inserted here -->
                             </div>
@@ -974,6 +974,7 @@ export class SystemConfigTabSimplified {
                         <!-- Preset buttons -->
                         ${this.renderCompactPresetButtons()}
 
+                        <!-- Modify button - commented out for now, will use later
                         <div style="height: 1px; background: #FE0089; margin: 2px 0;"></div>
 
                         <button onclick="window.systemConfigTab.showPresetModifier()" style="
@@ -989,6 +990,7 @@ export class SystemConfigTabSimplified {
                             width: 100%;
                             transition: all 0.2s;
                         " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(102, 102, 102, 0.1)'">MODIFY</button>
+                        -->
                     </div>
                 </div>
             </div>
