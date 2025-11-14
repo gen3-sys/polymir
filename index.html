@@ -12,8 +12,8 @@
             --primary-blue-light: #ff6b95;    /* lighter pink */
             --secondary-blue: #ff8fb0;        /* secondary accent */
             --text-primary: #ffffff;
-            --text-secondary: #8892b0;
-            --text-muted: #64748b;
+            --text-secondary: #aab6dc;
+            --text-muted: #7d91ae;
             --bg-gradient-start: #0a0a1a;
             --bg-gradient-mid: #1a1a2e;
             --bg-gradient-end: #16213e;
@@ -221,7 +221,7 @@
             font-weight: 700;
             letter-spacing: 2px;
             text-transform: lowercase;
-            filter: blur(0.3px) drop-shadow(0 0 4px var(--shadow-primary)) drop-shadow(0 0 5px var(--shadow-primary));
+            filter: blur(0.3px) drop-shadow(0 0 2px var(--shadow-primary)) drop-shadow(0 0 2.5px var(--shadow-primary));
         }
 
         .polymir-title {
@@ -241,7 +241,7 @@
             margin-bottom: 40px;
             max-width: 600px;
             line-height: 1.4;
-            filter: blur(0.3px) drop-shadow(0 0 4px var(--shadow-primary)) drop-shadow(0 0 7.5px var(--shadow-primary));
+            filter: blur(0.3px) drop-shadow(0 0 2px var(--shadow-primary)) drop-shadow(0 0 3.75px var(--shadow-primary));
         }
 
         .button-container {
@@ -885,7 +885,7 @@
         
         const CONFIG = {
             particles: {
-                max: 150,
+                max: 125,
                 spawnRate: 40,
                 connectionDistance: 120,
                 maxConnections: 4,
@@ -905,6 +905,8 @@
                 this.ctx = canvas.getContext('2d', { alpha: true });
                 this.particles = [];
                 this.connections = [];
+                this.connectionMap = new Map(); // Track persistent connections
+                this.nextParticleId = 0; // Unique ID counter
                 this.lastSpawnTime = 0;
                 this.isRunning = true;
                 this.isPaused = false;
@@ -966,6 +968,7 @@
             createParticle(isInitial = false) {
                 const colors = CONFIG.particles.colors;
                 const particle = {
+                    id: this.nextParticleId++,
                     x: Math.random() * this.logicalWidth,
                     y: Math.random() * this.logicalHeight,
                     vx: (Math.random() - 0.5) * 0.4,
@@ -1030,7 +1033,13 @@
             }
             
             updateConnections() {
-                this.connections = [];
+                const currentTime = performance.now();
+                const newConnections = [];
+                const activeKeys = new Set();
+                const particleById = new Map();
+
+                // Build particle lookup
+                this.particles.forEach(p => particleById.set(p.id, p));
 
                 for (let i = 0; i < this.particles.length; i++) {
                     const particle = this.particles[i];
@@ -1045,10 +1054,25 @@
 
                         if (distance < CONFIG.particles.connectionDistance &&
                             particleConnections.length < CONFIG.particles.maxConnections) {
-                            
+
+                            const connectionKey = `${particle.id}-${other.id}`;
                             const particleOpacity = Math.min(particle.opacity, other.opacity);
                             const distanceFade = (1 - distance / CONFIG.particles.connectionDistance) * 0.3;
 
+                            // Check if connection exists in map
+                            let existingConnection = this.connectionMap.get(connectionKey);
+
+                            if (!existingConnection) {
+                                // Create new connection
+                                existingConnection = {
+                                    fromId: particle.id,
+                                    toId: other.id,
+                                    createdAt: currentTime
+                                };
+                                this.connectionMap.set(connectionKey, existingConnection);
+                            }
+
+                            activeKeys.add(connectionKey);
                             particleConnections.push({
                                 from: particle,
                                 to: other,
@@ -1059,8 +1083,43 @@
                         }
                     }
 
-                    this.connections.push(...particleConnections);
+                    newConnections.push(...particleConnections);
                 }
+
+                // Keep ALL connections where both particles still exist - they fade with particle opacity
+                for (const [key, connection] of this.connectionMap.entries()) {
+                    if (!activeKeys.has(key)) {
+                        const fromParticle = particleById.get(connection.fromId);
+                        const toParticle = particleById.get(connection.toId);
+
+                        // Keep connection as long as both particles exist (still alive or fading out)
+                        if (fromParticle && toParticle) {
+                            const distance = Math.sqrt(
+                                Math.pow(fromParticle.x - toParticle.x, 2) +
+                                Math.pow(fromParticle.y - toParticle.y, 2)
+                            );
+
+                            // Only render if distance is reasonable (prevent cross-screen lines)
+                            if (distance < CONFIG.particles.connectionDistance * 1.5) {
+                                const particleOpacity = Math.min(fromParticle.opacity, toParticle.opacity);
+                                const distanceFade = Math.max(0, (1 - distance / CONFIG.particles.connectionDistance) * 0.3);
+
+                                newConnections.push({
+                                    from: fromParticle,
+                                    to: toParticle,
+                                    distance: distance,
+                                    opacity: distanceFade,
+                                    particleOpacity: particleOpacity
+                                });
+                            }
+                        } else {
+                            // Delete connection when either particle is dead
+                            this.connectionMap.delete(key);
+                        }
+                    }
+                }
+
+                this.connections = newConnections;
             }
             
             render() {
