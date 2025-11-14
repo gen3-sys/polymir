@@ -1,20 +1,15 @@
-/**
- * POLYMIR V3 - Beautiful System Configuration Tab
- * 
- * Tile-based UI with themed scrollbars and proper layout
- * Integrates new Phase 4-5 features
- */
 
-// Removed broken import - PreviewRenderer doesn't exist
-// import { PreviewRenderer } from './PreviewRenderer.js';
 
-// Global function for adding ring worlds (available immediately)
+
+
+
+
 window.addRingWorld = function() {
     if (window.systemConfigTab) {
         window.systemConfigTab.loadPreset('ring');
     } else {
         console.error('System Config Tab not initialized yet. Please try again.');
-        // Try again after a short delay
+        
         setTimeout(() => {
             if (window.systemConfigTab) {
                 window.systemConfigTab.loadPreset('ring');
@@ -31,25 +26,25 @@ export class SystemConfigTabSimplified {
         this.nextPlanetId = 1;
         this.nextMoonId = 1;
         this.selectedPlanetId = null;
-        // this.previewRenderer = new PreviewRenderer(); // Removed - doesn't exist
+        // this.previewRenderer = new PreviewRenderer(); 
 
-        // Procedural name generation
+        
         this.planetNamePrefixes = ['Ke', 'Tra', 'Xer', 'Zor', 'Pol', 'Ven', 'Mar', 'Nep', 'Ura', 'Sat'];
         this.planetNameSuffixes = ['ion', 'us', 'on', 'is', 'or', 'an', 'os', 'ar', 'ix', 'yx'];
         
-        // Make this available globally for button clicks
+        
         window.systemConfigTab = this;
         
-        // Also make the loadPreset function directly available
+        
         window.loadSystemPreset = (presetName) => this.loadPreset(presetName);
         
-        // Extended planet presets with new features
+        
         this.planetPresets = {
             'earth': {
                 name: 'Terra',
                 type: 'terrestrial',
-                radius: 20, // blocks
-                orbitalRadius: 150, // blocks
+                radius: 20, 
+                orbitalRadius: 150, 
                 orbitalPeriod: 365,
                 rotationPeriod: 24,
                 axialTilt: 23.5,
@@ -77,8 +72,8 @@ export class SystemConfigTabSimplified {
             'mars': {
                 name: 'Rust',
                 type: 'martian',
-                radius: 10, // blocks (smaller than Earth)
-                orbitalRadius: 228, // blocks
+                radius: 10, 
+                orbitalRadius: 228, 
                 orbitalPeriod: 687,
                 rotationPeriod: 24.6,
                 axialTilt: 25,
@@ -102,12 +97,12 @@ export class SystemConfigTabSimplified {
             'jupiter': {
                 name: 'Giant',
                 type: 'jovian',
-                radius: 70, // blocks (gas giant, much larger)
-                orbitalRadius: 520, // blocks
+                radius: 70, 
+                orbitalRadius: 520, 
                 orbitalPeriod: 4333,
                 rotationPeriod: 10,
                 axialTilt: 3,
-                rotationSpeed: 0.003, // Fast rotation
+                rotationSpeed: 0.003, 
                 orbitalSpeed: 0.0001,
                 gasGiantOnly: true,
                 hasRings: true,
@@ -131,7 +126,7 @@ export class SystemConfigTabSimplified {
                 radius: 19,
                 orbitalRadius: 108,
                 orbitalPeriod: 225,
-                rotationPeriod: -243, // Retrograde
+                rotationPeriod: -243, 
                 axialTilt: 177,
                 waterLevel: 0,
                 waterCoverage: 0,
@@ -149,8 +144,8 @@ export class SystemConfigTabSimplified {
             'ice': {
                 name: 'Frozen',
                 type: 'ice_world',
-                radius: 15, // blocks
-                orbitalRadius: 400, // blocks (far from star)
+                radius: 15, 
+                orbitalRadius: 400, 
                 orbitalPeriod: 1000,
                 rotationPeriod: 30,
                 axialTilt: 45,
@@ -175,8 +170,8 @@ export class SystemConfigTabSimplified {
             'lava': {
                 name: 'Vulcan',
                 type: 'lava_world',
-                radius: 18, // blocks
-                orbitalRadius: 50, // blocks (close to star)
+                radius: 18, 
+                orbitalRadius: 50, 
                 orbitalPeriod: 88,
                 rotationPeriod: 59,
                 tidalLocked: true,
@@ -237,9 +232,9 @@ export class SystemConfigTabSimplified {
                 type: 'ringworld',
                 worldType: 'ring',
                 centeredOnStar: true,
-                radius: 150, // blocks (massive ringworld)
-                width: 100, // blocks width
-                orbitalRadius: 0, // No orbit - centered on star
+                radius: 150, 
+                width: 100, 
+                orbitalRadius: 0, 
                 rotationSpeed: 0.001,
                 orbitalSpeed: 0.0002,
                 axialTilt: 0,
@@ -261,7 +256,7 @@ export class SystemConfigTabSimplified {
             }
         };
         
-        // Toggle states
+        
         this.toggleStates = {
             orbital: false,
             water: false,
@@ -270,7 +265,7 @@ export class SystemConfigTabSimplified {
             exotic: false
         };
         
-        // Asteroid configuration
+        
         this.asteroidConfig = {
             enabled: true,
             count: 30,
@@ -280,13 +275,13 @@ export class SystemConfigTabSimplified {
             comets: false
         };
         
-        // Ring & Moon configuration
+        
         this.ringMoonConfig = {
             targetBody: null,
             rings: {
                 enabled: false,
                 type: 'shader',  // 'shader' or 'voxel'
-                innerRadius: 1.5,  // Multiplier of body radius
+                innerRadius: 1.5,  
                 outerRadius: 2.5,
                 density: 0.8,
                 color: '#C4B5A0'
@@ -298,37 +293,37 @@ export class SystemConfigTabSimplified {
             }
         };
 
-        // Add default planets so the user has something to start with
-        // Add planets with proper spacing (2x combined gravity radii)
-        // Planet 1: Earth-like
+        
+        
+        
         const earth = {
             ...this.planetPresets['earth'],
             id: this.nextPlanetId++,
             orbitalRadius: 150,
-            gravityRadius: 150 * 0.6 // Default to 60% of orbital radius
+            gravityRadius: 150 * 0.6 
         };
         this.planets.push(earth);
 
-        // Planet 2: Mars-like
+        
         const mars = {
             ...this.planetPresets['mars'],
             id: this.nextPlanetId++
         };
-        // Calculate proper orbit: 2x (earth gravity + mars gravity)
+        
         mars.gravityRadius = 250 * 0.6;
         mars.orbitalRadius = earth.orbitalRadius + (2 * (earth.gravityRadius + mars.gravityRadius));
         this.planets.push(mars);
 
-        // Planet 3: Gas Giant with rings
+        
         const jupiter = {
             ...this.planetPresets['jupiter'],
             id: this.nextPlanetId++,
             hasRings: true,
-            ringInnerRadius: 105, // 1.5x planet radius (70 * 1.5)
-            ringOuterRadius: 175, // 2.5x planet radius (70 * 2.5)
+            ringInnerRadius: 105, 
+            ringOuterRadius: 175, 
             ringColor: '#D2691E'
         };
-        // Calculate proper orbit: 2x (mars gravity + jupiter gravity)
+        
         jupiter.gravityRadius = 520 * 0.6;
         jupiter.orbitalRadius = mars.orbitalRadius + (2 * (mars.gravityRadius + jupiter.gravityRadius));
         this.planets.push(jupiter);
@@ -378,12 +373,8 @@ export class SystemConfigTabSimplified {
                     box-shadow: 0 4px 15px rgba(0, 255, 255, 0.2);
                 }
                 
-                .planet-tile:hover {
-                    transform: translateY(-5px);
-                    box-shadow: 0 8px 25px rgba(0, 255, 255, 0.4);
-                    border-color: #00FF00;
-                }
-                
+                /* Removed .planet-tile:hover - only buttons inside should react */
+
                 .planet-tile::before {
                     content: '';
                     position: absolute;
@@ -398,22 +389,14 @@ export class SystemConfigTabSimplified {
                     transition: opacity 0.3s;
                 }
                 
-                .planet-tile:hover::before {
-                    opacity: 0.3;
-                    animation: pulse 2s infinite;
-                }
-                
-                @keyframes pulse {
-                    0%, 100% { transform: scale(1); opacity: 0.3; }
-                    50% { transform: scale(1.05); opacity: 0.5; }
-                }
+                /* Removed .planet-tile:hover::before and pulse animation */
                 
                 /* Toggle Sections */
                 .toggle-section {
                     background: linear-gradient(135deg, rgba(0, 0, 0, 0.5) 0%, rgba(0, 20, 40, 0.5) 100%);
                     border: 1px solid;
                     border-radius: 10px;
-                    margin-bottom: 15px;
+                    margin-bottom: 2px;
                     overflow: hidden;
                     transition: all 0.3s ease;
                 }
@@ -553,11 +536,11 @@ export class SystemConfigTabSimplified {
         return `
             <div style="padding: 8px; padding-top: 30px; height: 100%; overflow: visible;">
                 <!-- Main layout with right sidebar -->
-                <div style="display: flex; gap: 10px; height: 100%;">
+                <div style="display: flex; gap: 10px; height: 100%; align-items: flex-start;">
                     <!-- Left content area -->
                     <div style="flex: 1; position: relative;">
                         <!-- Top row: Stacked cards and Preview -->
-                        <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+                        <div style="display: flex; gap: 10px; margin-bottom: 8px; align-items: flex-start;">
                             <!-- Stacked Star and Asteroid Cards -->
                             <div id="left-stacked-cards" style="display: flex; flex-direction: column; gap: 6px;">
                                 <!-- Star Card -->
@@ -742,23 +725,6 @@ export class SystemConfigTabSimplified {
                             
                             <!-- 3D Preview Canvas with header -->
                             <div style="position: relative; flex: 1;">
-                                <h3 style="
-                                    position: absolute;
-                                    top: 10px;
-                                    left: 50%;
-                                    transform: translateX(-50%);
-                                    color: #00FF00; 
-                                    margin: 0;
-                                    font-size: 11px;
-                                    font-weight: bold;
-                                    text-transform: uppercase;
-                                    letter-spacing: 1px;
-                                    padding: 2px 12px;
-                                    background: rgba(0, 20, 40, 0.9);
-                                    border: 1px solid #00FF00;
-                                    border-radius: 10px;
-                                    z-index: 15;
-                                ">Terrain Painter</h3>
                                 <div id="system-preview-3d" style="
                                 width: 100%;
                                 height: 320px;
@@ -770,6 +736,92 @@ export class SystemConfigTabSimplified {
                                 box-shadow: inset 0 0 30px rgba(0, 100, 200, 0.3);
                             ">
                                 <canvas id="preview-canvas" style="width: 100%; height: 100%; cursor: grab; user-select: none;"></canvas>
+
+                                <!-- System Preview Title -->
+                                <h3 style="
+                                    position: absolute;
+                                    top: 10px;
+                                    left: 50%;
+                                    transform: translateX(-50%);
+                                    color: #00FF00;
+                                    margin: 0;
+                                    font-size: 11px;
+                                    font-weight: bold;
+                                    text-transform: uppercase;
+                                    letter-spacing: 1px;
+                                    padding: 2px 12px;
+                                    background: rgba(0, 20, 40, 0.9);
+                                    border: 1px solid #00FF00;
+                                    border-radius: 10px;
+                                    z-index: 15;
+                                    pointer-events: none;
+                                ">System Preview</h3>
+
+                                <!-- Preview Mode Toggle Buttons - Overlay on preview -->
+                                <div style="
+                                    position: absolute;
+                                    top: 45px;
+                                    left: 50%;
+                                    transform: translateX(-50%);
+                                    display: flex;
+                                    gap: 6px;
+                                    z-index: 15;
+                                ">
+                                    <button class="preview-mode-btn" data-mode="galaxy" style="
+                                        padding: 4px 12px;
+                                        background: rgba(100, 100, 255, 0.2);
+                                        color: #6B8AFF;
+                                        border: 1px solid #6B8AFF;
+                                        border-radius: 4px;
+                                        font-size: 10px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        backdrop-filter: blur(5px);
+                                    " onclick="window.systemGenerator?.setPreviewMode('galaxy')">
+                                        GALAXY
+                                    </button>
+                                    <button class="preview-mode-btn active" data-mode="system" style="
+                                        padding: 4px 12px;
+                                        background: rgba(254, 0, 137, 0.4);
+                                        color: #FE0089;
+                                        border: 1px solid #FE0089;
+                                        border-radius: 4px;
+                                        font-size: 10px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        backdrop-filter: blur(5px);
+                                    " onclick="window.systemGenerator?.setPreviewMode('system')">
+                                        SYSTEM
+                                    </button>
+                                    <button class="preview-mode-btn" data-mode="planet" style="
+                                        padding: 4px 12px;
+                                        background: rgba(0, 255, 100, 0.2);
+                                        color: #00FF66;
+                                        border: 1px solid #00FF66;
+                                        border-radius: 4px;
+                                        font-size: 10px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        backdrop-filter: blur(5px);
+                                    " onclick="window.systemGenerator?.setPreviewMode('planet')">
+                                        PLANET
+                                    </button>
+                                    <button class="preview-mode-btn" data-mode="supercluster" style="
+                                        padding: 4px 12px;
+                                        background: rgba(0, 255, 255, 0.1);
+                                        color: #00FFFF;
+                                        border: 1px solid #00FFFF;
+                                        border-radius: 4px;
+                                        font-size: 10px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        backdrop-filter: blur(5px);
+                                    " onclick="window.systemGenerator?.toggleSuperclusterView()" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 255, 0.1)'">
+                                        SUPERCLUSTER
+                                    </button>
+                                </div>
+
+                                <!-- Controls hint -->
                                 <div style="
                                     position: absolute;
                                     bottom: 8px;
@@ -788,11 +840,11 @@ export class SystemConfigTabSimplified {
                         </div>
                         
                         <!-- Planet Bodies Grid (spans entire width including under sidebar) -->
-                        <div style="position: absolute; top: 340px; left: 0; right: -110px; bottom: -100px; z-index: 10;">
+                        <div id="planet-cards-container" style="position: absolute; top: 340px; left: 0; right: -110px; bottom: -100px; z-index: 10;">
                             <div id="bodies-grid" style="
-                                display: grid; 
-                                grid-template-columns: repeat(5, 180px); 
-                                gap: 30px; 
+                                display: grid;
+                                grid-template-columns: repeat(5, 180px);
+                                gap: 30px;
                                 height: auto;
                                 overflow: visible;
                                 z-index: 10;
@@ -800,9 +852,16 @@ export class SystemConfigTabSimplified {
                             ">
                                 <!-- Ghost card to skip the space under Ring & Moon Gen -->
                                 <div style="visibility: hidden;"></div>
-                                
+
                                 <!-- Planet Cards - start after the ghost card -->
                                 ${this.planets.map(p => this.renderPlanetTile(p)).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Supercluster Configuration (hidden by default) -->
+                        <div id="supercluster-config-container" style="position: absolute; top: 340px; left: 0; right: -110px; bottom: -100px; z-index: 10; display: none; padding: 20px; overflow-y: auto;">
+                            <div id="supercluster-content" style="color: white;">
+                                <!-- Supercluster content will be inserted here -->
                             </div>
                         </div>
                     </div>
@@ -821,92 +880,115 @@ export class SystemConfigTabSimplified {
                         z-index: 50;
                         pointer-events: auto;
                     ">
-                        <!-- Generate System button at top -->
+                        <!-- Generate System button - PRIMARY ACTION -->
                         <button onclick="window.systemGenerator.generateSystem()" style="
-                            padding: 6px 8px;
-                            background: linear-gradient(135deg, #00FF00 0%, #00AA00 100%);
-                            color: black;
+                            padding: 8px 8px;
+                            background: rgba(0, 255, 0, 0.1);
+                            color: white;
                             border: 2px solid #00FF00;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 11px;
+                            font-family: 'Courier New', monospace;
+                            font-weight: bold;
+                            width: 100%;
+                            box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+                            margin-bottom: 4px;
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 0, 0.1)'">GENERATE<br>SYSTEM</button>
+
+                        <!-- Add to Cluster button -->
+                        <button onclick="window.systemGenerator.addSystemToCluster()" style="
+                            padding: 6px 8px;
+                            background: rgba(107, 138, 255, 0.1);
+                            color: white;
+                            border: 2px solid #6B8AFF;
                             border-radius: 4px;
                             cursor: pointer;
                             font-size: 10px;
                             font-family: 'Courier New', monospace;
                             font-weight: bold;
                             width: 100%;
-                            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-                        ">GENERATE<br>SYSTEM</button>
-                        
+                            transition: all 0.2s;
+                            margin-bottom: 4px;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(107, 138, 255, 0.1)'">ADD TO<br>CLUSTER</button>
+
                         <div style="height: 1px; background: #FE0089; margin: 2px 0;"></div>
                         
                         <!-- Action buttons -->
                         <button onclick="window.systemConfigTab.addPlanet()" style="
                             padding: 2px 4px;
-                            background: linear-gradient(135deg, #00FF00 0%, #00AA00 100%);
-                            color: black;
-                            border: 1px solid #00FF00;
+                            background: rgba(0, 255, 0, 0.1);
+                            color: white;
+                            border: 2px solid #00FF00;
                             border-radius: 4px;
                             cursor: pointer;
                             font-size: 10px;
                             font-family: 'Courier New', monospace;
                             width: 100%;
-                        ">+ ADD PLANET</button>
-                        
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 0, 0.1)'">+ ADD PLANET</button>
+
                         <button onclick="window.addRingWorld()" style="
                             padding: 2px 4px;
-                            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-                            color: black;
-                            border: 1px solid #FFD700;
+                            background: rgba(255, 215, 0, 0.1);
+                            color: white;
+                            border: 2px solid #FFD700;
                             border-radius: 4px;
                             cursor: pointer;
                             font-size: 10px;
                             font-family: 'Courier New', monospace;
                             width: 100%;
                             margin-top: 2px;
-                        ">+ ADD RING WORLD</button>
-                        
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(255, 215, 0, 0.1)'">+ ADD RING WORLD</button>
+
                         <button onclick="window.systemConfigTab.saveConfiguration()" style="
                             padding: 2px 4px;
-                            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-                            color: black;
-                            border: 1px solid #FFD700;
+                            background: rgba(255, 215, 0, 0.1);
+                            color: white;
+                            border: 2px solid #FFD700;
                             border-radius: 4px;
                             cursor: pointer;
                             font-size: 10px;
                             font-family: 'Courier New', monospace;
                             width: 100%;
-                        ">SAVE CONFIG</button>
-                        
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(255, 215, 0, 0.1)'">SAVE CONFIG</button>
+
                         <button onclick="window.systemConfigTab.showSavedConfigs()" style="
                             padding: 2px 4px;
-                            background: linear-gradient(135deg, #9400D3 0%, #4B0082 100%);
+                            background: rgba(148, 0, 211, 0.1);
                             color: white;
-                            border: 1px solid #9400D3;
+                            border: 2px solid #9400D3;
                             border-radius: 4px;
                             cursor: pointer;
                             font-size: 10px;
                             font-family: 'Courier New', monospace;
                             width: 100%;
-                        ">LOAD CONFIG</button>
-                        
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(148, 0, 211, 0.1)'">LOAD CONFIG</button>
+
                         <div style="height: 1px; background: #FE0089; margin: 2px 0;"></div>
-                        
+
                         <!-- Preset buttons -->
                         ${this.renderCompactPresetButtons()}
-                        
+
                         <div style="height: 1px; background: #FE0089; margin: 2px 0;"></div>
-                        
+
                         <button onclick="window.systemConfigTab.showPresetModifier()" style="
                             padding: 4px 8px;
-                            background: linear-gradient(135deg, #444 0%, #222 100%);
-                            color: #FFD700;
-                            border: 1px solid #666;
+                            background: rgba(102, 102, 102, 0.1);
+                            color: white;
+                            border: 2px solid #666;
                             border-radius: 4px;
                             cursor: pointer;
                             font-size: 10px;
                             font-family: 'Courier New', monospace;
                             font-weight: bold;
                             width: 100%;
-                        ">MODIFY</button>
+                            transition: all 0.2s;
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(102, 102, 102, 0.1)'">MODIFY</button>
                     </div>
                 </div>
             </div>
@@ -918,21 +1000,21 @@ export class SystemConfigTabSimplified {
      */
     renderCompactPresetButtons() {
         const presets = [
-            { key: 'earth', name: 'Terra', gradient: 'linear-gradient(135deg, #4169E1 0%, #1E90FF 100%)', color: 'white' },
-            { key: 'mars', name: 'Rust', gradient: 'linear-gradient(135deg, #CD5C5C 0%, #8B4513 100%)', color: 'white' },
-            { key: 'jupiter', name: 'Giant', gradient: 'linear-gradient(135deg, #DEB887 0%, #D2691E 100%)', color: 'black' },
-            { key: 'ice', name: 'Frozen', gradient: 'linear-gradient(135deg, #E0FFFF 0%, #87CEEB 100%)', color: 'black' },
-            { key: 'lava', name: 'Vulcan', gradient: 'linear-gradient(135deg, #FF4500 0%, #DC143C 100%)', color: 'white' },
-            { key: 'ring', name: 'Halo', gradient: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)', color: 'black' }
+            { key: 'earth', name: 'Terra', borderColor: '#4169E1', baseBg: 'rgba(65, 105, 225, 0.1)' },
+            { key: 'mars', name: 'Rust', borderColor: '#CD5C5C', baseBg: 'rgba(205, 92, 92, 0.1)' },
+            { key: 'jupiter', name: 'Giant', borderColor: '#DEB887', baseBg: 'rgba(222, 184, 135, 0.1)' },
+            { key: 'ice', name: 'Frozen', borderColor: '#87CEEB', baseBg: 'rgba(135, 206, 235, 0.1)' },
+            { key: 'lava', name: 'Vulcan', borderColor: '#FF4500', baseBg: 'rgba(255, 69, 0, 0.1)' },
+            { key: 'ring', name: 'Halo', borderColor: '#FFD700', baseBg: 'rgba(255, 215, 0, 0.1)' }
         ];
-        
+
         return presets.map(preset => {
             return `
                 <button onclick="window.systemConfigTab.loadPreset('${preset.key}')" style="
                     padding: 4px 8px;
-                    background: ${preset.gradient};
-                    color: ${preset.color};
-                    border: 1px solid rgba(255,255,255,0.3);
+                    background: ${preset.baseBg};
+                    color: white;
+                    border: 2px solid ${preset.borderColor};
                     border-radius: 4px;
                     cursor: pointer;
                     font-size: 10px;
@@ -941,7 +1023,7 @@ export class SystemConfigTabSimplified {
                     white-space: nowrap;
                     width: 100%;
                     transition: all 0.2s;
-                ">${preset.name.toUpperCase()}</button>
+                " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='${preset.baseBg}'">${preset.name.toUpperCase()}</button>
             `;
         }).join('');
     }
@@ -1021,80 +1103,75 @@ export class SystemConfigTabSimplified {
                     ">X</button>
                 </div>
                 
-                <!-- Basic Properties -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-bottom: 2px;" onclick="event.stopPropagation()">
-                    <div>
-                        <label style="color: #888; font-size: 9px;">Radius (blocks)</label>
+                <!-- Compact Inline Properties -->
+                <div onclick="event.stopPropagation()">
+                    <!-- Row 1: Radius & Orbit -->
+                    <div style="display: grid; grid-template-columns: 50px 1fr 55px 1fr; gap: 4px; align-items: center; margin-bottom: 2px;">
+                        <label style="color: #888; font-size: 9px;">Radius</label>
                         <input type="number" value="${Math.round(planet.radius || 20)}" min="${isMoon ? 1 : 5}" max="${isMoon ? 50 : 200}" class="polymir-input" style="font-size: 10px; padding: 1px;"
                                onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'radius', parseFloat(this.value))">
-                    </div>
-                    <div>
-                        <label style="color: #888; font-size: 9px;">${isMoon ? 'Distance' : 'Orbit'} (blk)</label>
+                        <label style="color: #888; font-size: 9px;">Orbit</label>
                         <input type="number" value="${Math.round(planet.orbitalRadius || 100)}" min="${isMoon ? 10 : 30}" max="${isMoon ? 200 : 1000}" class="polymir-input" style="font-size: 10px; padding: 1px;"
                                onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalRadius', parseFloat(this.value))">
                     </div>
-                </div>
-
-                <!-- Rotation & Tilt Properties -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-bottom: 2px;" onclick="event.stopPropagation()">
-                    <div>
-                        <label style="color: #888; font-size: 9px;">Tilt (deg)</label>
+                    <!-- Row 2: Tilt & Rotation -->
+                    <div style="display: grid; grid-template-columns: 50px 1fr 55px 1fr; gap: 4px; align-items: center; margin-bottom: 2px;">
+                        <label style="color: #888; font-size: 9px;">Tilt</label>
                         <input type="number" value="${Math.round((planet.axialTilt || 0) * 10) / 10}" min="0" max="180" step="0.5" class="polymir-input" style="font-size: 10px; padding: 1px;"
                                onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'axialTilt', parseFloat(this.value))">
-                    </div>
-                    <div>
                         <label style="color: #888; font-size: 9px;">Rotation</label>
                         <input type="number" value="${Math.round((planet.rotationSpeed || 0.001) * 10000) / 10000}" min="0" max="0.01" step="0.0001" class="polymir-input" style="font-size: 10px; padding: 1px;"
                                onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'rotationSpeed', parseFloat(this.value))">
                     </div>
                 </div>
 
-                <!-- Orbital Speed (Year) -->
-                <div style="margin-bottom: 2px;" onclick="event.stopPropagation()">
-                    <label style="color: #888; font-size: 9px;">Year Speed</label>
-                    <input type="number" value="${Math.round((planet.orbitalSpeed || 0.0003) * 10000) / 10000}" min="0" max="0.01" step="0.0001" class="polymir-input" style="font-size: 10px; padding: 1px; width: 100%;"
-                           onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalSpeed', parseFloat(this.value))">
-                </div>
-                
-                <!-- Quick toggles -->
-                <div style="margin-bottom: 2px;">
-                    ${isMoon ? `
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-bottom: 2px;">
-                            <div>
-                                <label style="color: #888; font-size: 10px;">Inclination</label>
-                                <input type="number" value="${planet.orbitalInclination || 0}" min="-90" max="90" step="5" 
-                                       class="polymir-input" style="font-size: 10px; padding: 1px;"
-                                       onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalInclination', parseFloat(this.value))">
-                            </div>
-                            <div>
-                                <label style="color: #888; font-size: 10px;">Direction</label>
-                                <select class="polymir-input" style="font-size: 10px; padding: 0px; height: 20px;"
-                                        onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalDirection', this.value)">
-                                    <option value="prograde" ${planet.orbitalDirection === 'prograde' ? 'selected' : ''}>Prograde</option>
-                                    <option value="retrograde" ${planet.orbitalDirection === 'retrograde' ? 'selected' : ''}>Retrograde</option>
-                                </select>
-                            </div>
-                        </div>
-                        <label style="display: flex; align-items: center; gap: 2px; color: #888; font-size: 10px;">
-                            <input type="checkbox" ${planet.tidalLocked ? 'checked' : ''} 
-                                   onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'tidalLocked', this.checked)">
-                            Tidal Lock
+                <!-- Year Speed Slider & Asteroid Belt -->
+                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 2px;" onclick="event.stopPropagation()">
+                    <label style="color: #888; font-size: 9px; white-space: nowrap;">Year Speed</label>
+                    <input type="range" value="${Math.round((planet.orbitalSpeed || 0.0003) * 10000)}" min="0" max="100" step="1" class="polymir-input" style="width: 70px !important; flex-shrink: 0;"
+                           oninput="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalSpeed', parseFloat(this.value) / 10000)">
+                    ${!isMoon ? `
+                        <label style="display: flex; align-items: center; gap: 2px; color: #888; font-size: 8px; white-space: nowrap;">
+                            <input type="checkbox" ${planet.hasAsteroidBelt ? 'checked' : ''}
+                                   onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'hasAsteroidBelt', this.checked)">
+                            Ast. Belt
                         </label>
-                    ` : `
-                        <div style="display: flex; gap: 4px;">
-                            <label style="display: flex; align-items: center; gap: 2px; color: #888; font-size: 10px;">
-                                <input type="checkbox" ${planet.generateStructures ? 'checked' : ''} 
-                                       onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'generateStructures', this.checked)">
-                                Structures
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 2px; color: #FFD700; font-size: 10px;">
-                                <input type="checkbox" ${planet.hasAsteroidBelt ? 'checked' : ''} 
-                                       onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'hasAsteroidBelt', this.checked)">
-                                Asteroid Belt
-                            </label>
-                        </div>
-                    `}
+                    ` : ''}
                 </div>
+
+                ${!isMoon ? `
+                    <!-- Structures Checkbox -->
+                    <div style="margin-bottom: 2px;">
+                        <label style="display: flex; align-items: center; gap: 2px; color: #888; font-size: 10px;">
+                            <input type="checkbox" ${planet.generateStructures ? 'checked' : ''}
+                                   onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'generateStructures', this.checked)">
+                            Structures
+                        </label>
+                    </div>
+                ` : `
+                    <!-- Moon-specific controls -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; margin-bottom: 2px;">
+                        <div>
+                            <label style="color: #888; font-size: 9px;">Inclination</label>
+                            <input type="number" value="${planet.orbitalInclination || 0}" min="-90" max="90" step="5"
+                                   class="polymir-input" style="font-size: 10px; padding: 1px;"
+                                   onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalInclination', parseFloat(this.value))">
+                        </div>
+                        <div>
+                            <label style="color: #888; font-size: 9px;">Direction</label>
+                            <select class="polymir-input" style="font-size: 10px; padding: 0px; height: 20px;"
+                                    onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalDirection', this.value)">
+                                <option value="prograde" ${planet.orbitalDirection === 'prograde' ? 'selected' : ''}>Prograde</option>
+                                <option value="retrograde" ${planet.orbitalDirection === 'retrograde' ? 'selected' : ''}>Retrograde</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label style="display: flex; align-items: center; gap: 2px; color: #888; font-size: 10px; margin-bottom: 2px;">
+                        <input type="checkbox" ${planet.tidalLocked ? 'checked' : ''}
+                               onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'tidalLocked', this.checked)">
+                        Tidal Lock
+                    </label>
+                `}
                 
                 <!-- Advanced toggle -->
                 <div style="background: rgba(0,0,0,0.2); padding: 2px 4px; margin: 2px -4px; cursor: pointer;"
@@ -1350,7 +1427,7 @@ export class SystemConfigTabSimplified {
             const key = `show${sectionType.charAt(0).toUpperCase() + sectionType.slice(1)}`;
             planet[key] = !planet[key];
             
-            // Re-render
+            
             if (this.generator) {
                 this.generator.showSystemTab();
             }
@@ -1365,7 +1442,7 @@ export class SystemConfigTabSimplified {
         if (planet) {
             planet.showAdvanced = !planet.showAdvanced;
             
-            // Re-render
+            
             if (this.generator) {
                 this.generator.showSystemTab();
             }
@@ -1387,7 +1464,7 @@ export class SystemConfigTabSimplified {
         this.ringMoonConfig.rings[property] = value;
         console.log(`Updated ring ${property}:`, value);
         
-        // Apply rings to target body if enabled
+        
         if (this.ringMoonConfig.targetBody && this.ringMoonConfig.rings.enabled) {
             this.applyRingsToBody(this.ringMoonConfig.targetBody);
         }
@@ -1408,14 +1485,14 @@ export class SystemConfigTabSimplified {
      */
     applyRingsToBody(bodyId) {
         if (bodyId === 'star') {
-            // Apply to star
+            
             if (!this.star) {
                 this.star = { name: 'Sol', type: 'white', radius: 60, colorValue: 2.0 };
             }
             this.star.hasRings = this.ringMoonConfig.rings.enabled;
             this.star.ringConfig = { ...this.ringMoonConfig.rings };
         } else {
-            // Apply to planet
+            
             const planet = this.planets.find(p => p.id == bodyId);
             if (planet) {
                 planet.hasRings = this.ringMoonConfig.rings.enabled;
@@ -1424,7 +1501,7 @@ export class SystemConfigTabSimplified {
                 planet.ringOuterRadius = planet.radius * this.ringMoonConfig.rings.outerRadius;
                 planet.ringDensity = this.ringMoonConfig.rings.density;
                 planet.ringColor = this.ringMoonConfig.rings.color;
-                // Wire ring terrain settings to preview consumer
+                
                 planet.ringTerrain = planet.ringTerrain || {};
                 if (typeof this.ringMoonConfig.rings.amplitudeNormalized === 'number') {
                     planet.ringTerrain.amplitudeNormalized = this.ringMoonConfig.rings.amplitudeNormalized;
@@ -1467,16 +1544,16 @@ export class SystemConfigTabSimplified {
             isMoon: true
         };
         
-        // Add to parent's moon list
+        
         if (!parent.moons) parent.moons = [];
         parent.moons.push(moonConfig.id);
         
-        // Add to planets array for rendering
+        
         this.planets.push(moonConfig);
         
         console.log(`Attached moon to ${parent.name}:`, moonConfig);
         
-        // Update preview and re-render
+        
         this.updatePreview();
         if (this.generator) {
             this.generator.showSystemTab();
@@ -1499,14 +1576,14 @@ export class SystemConfigTabSimplified {
             radius: this.ringMoonConfig.moons.size || 5,
             parent: this.ringMoonConfig.targetBody,
             tidalLocked: this.ringMoonConfig.moons.tidalLocked,
-            orbitalRadius: 0,  // Will be calculated based on parent
+            orbitalRadius: 0,  
             orbitalSpeed: 0.001,
-            orbitalInclination: 0,  // Degrees off the plane
+            orbitalInclination: 0,  
             orbitalDirection: 'prograde',  // 'prograde' or 'retrograde'
-            rotationPeriod: 27.3,  // Earth days (default like our Moon)
-            axialTilt: 5,  // Degrees
+            rotationPeriod: 27.3,  
+            axialTilt: 5,  
             eccentricity: 0.05,
-            gravity: 0.17,  // Moon-like gravity
+            gravity: 0.17,  
             mass: 0.012,
             density: 3.3,
             color: '#C0C0C0',
@@ -1515,30 +1592,30 @@ export class SystemConfigTabSimplified {
         };
         
         if (this.ringMoonConfig.targetBody === 'star') {
-            // Orbit around star - unlikely but possible
+            
             moonConfig.orbitalRadius = 50;
             moonConfig.parentName = 'Sol';
             moonConfig.parentId = 'star';
         } else {
-            // Orbit around planet
+            
             const parent = this.planets.find(p => p.id == this.ringMoonConfig.targetBody);
             if (parent) {
-                moonConfig.orbitalRadius = parent.radius * 3;  // Default to 3x parent radius
+                moonConfig.orbitalRadius = parent.radius * 3;  
                 moonConfig.parentName = parent.name;
                 moonConfig.parentId = parent.id;
                 
-                // Add moon to parent's moon list
+                
                 if (!parent.moons) parent.moons = [];
                 parent.moons.push(moonConfig.id);
             }
         }
         
-        // Add moon as a special type of planet card
+        
         this.planets.push(moonConfig);
         
         console.log('Generated moon card:', moonConfig);
         
-        // Re-render
+        
         if (this.generator) {
             this.generator.showSystemTab();
         }
@@ -1600,7 +1677,7 @@ export class SystemConfigTabSimplified {
             this.star = { name: 'Sol', type: 'white', radius: 60, colorValue: 2.0 };
         }
 
-        // Map slider value to color names
+        
         let colorName, type;
         if (colorValue < 0.5) {
             colorName = 'Red';
@@ -1622,7 +1699,7 @@ export class SystemConfigTabSimplified {
         this.star.colorValue = colorValue;
         this.star.type = type;
 
-        // Update label
+        
         const label = document.getElementById('star-color-label');
         if (label) {
             label.textContent = colorName;
@@ -1650,17 +1727,17 @@ export class SystemConfigTabSimplified {
             planet[property] = value;
             console.log(`Updated planet ${planetId} ${property} to ${value}`);
 
-            // Special handling for star-centered rings
+            
             if (property === 'starCentered' && value === true && planet.worldType === 'ring') {
-                // Ensure ring worlds have nature biomes if not already set
+                
                 if (!planet.biomes || Object.keys(planet.biomes).length === 0) {
                     planet.biomes = {
-                        grassland: 35,  // Green fields
-                        forest: 30,     // Forests
-                        ocean: 15,      // Water
-                        desert: 5,      // Some arid
-                        mountains: 10,  // Terrain
-                        crystal: 5,     // Decorative
+                        grassland: 35,  
+                        forest: 30,     
+                        ocean: 15,      
+                        desert: 5,      
+                        mountains: 10,  
+                        crystal: 5,     
                         ice: 0,
                         lava: 0
                     };
@@ -1669,19 +1746,19 @@ export class SystemConfigTabSimplified {
                 }
             }
 
-            // Only regenerate if property requires new geometry
+            
             const geometryProperties = ['radius', 'worldType', 'type', 'biomes', 'hasRings', 'ringInnerRadius', 'ringOuterRadius', 'ringColor'];
             const needsRegeneration = geometryProperties.includes(property);
 
             if (needsRegeneration) {
-                // Full regeneration needed - geometry change
+                
                 this.updatePreview();
             } else {
-                // Just update the property in-place without regenerating
-                // axialTilt - just rotation, no geometry change
-                // color - just material color, no geometry change
-                // orbitalRadius, orbitalSpeed, rotationSpeed - animation loop handles
-                // structures, asteroids - generation-time only
+                
+                
+                
+                
+                
                 console.log(`Property ${property} updated without regeneration`);
             }
         }
@@ -1716,14 +1793,14 @@ export class SystemConfigTabSimplified {
     selectPlanet(planetId) {
         this.selectedPlanetId = planetId;
 
-        // Find planet
+        
         const planet = this.planets.find(p => p.id === planetId);
-        if (!planet || !this.generator) return;
+        if (!planet) return;
 
-        // Enter planet editing mode
-        this.generator.enterPlanetEditingMode(planet);
+        console.log(`Selected planet: ${planet.name}`);
 
-        console.log(`Entering terrain editing mode for: ${planet.name}`);
+        
+        this.updatePreview();
     }
 
     /**
@@ -1737,50 +1814,53 @@ export class SystemConfigTabSimplified {
     }
 
     addPlanet(preset = null) {
-        // Calculate proper orbital radius based on 2x combined gravity radii
-        let orbitalRadius = 150; // Default starting orbit
 
-        if (this.planets.length > 0) {
-            // Find the outermost planet
+        let orbitalRadius = 150;
+
+        // Ringworlds and star-centered bodies should keep their preset orbitalRadius (typically 0)
+        const isStarCentered = preset?.centeredOnStar || preset?.type === 'ringworld' || preset?.worldType === 'ring';
+
+        if (this.planets.length > 0 && !isStarCentered) {
+
             const lastPlanet = this.planets.reduce((max, p) =>
                 p.orbitalRadius > max.orbitalRadius ? p : max
             );
 
-            // Calculate new planet's radius and gravity radius
+
             const newRadius = preset?.radius || 20;
             const newGravityRadius = (preset?.orbitalRadius || (lastPlanet.orbitalRadius + 200)) * 0.6;
 
-            // Last planet's gravity radius
+
             const lastGravityRadius = lastPlanet.gravityRadius || (lastPlanet.orbitalRadius * 0.6);
 
-            // New orbit = last orbit + 2x (last gravity + new gravity)
+
             orbitalRadius = lastPlanet.orbitalRadius + (2 * (lastGravityRadius + newGravityRadius));
         }
 
         const newPlanet = preset ? {
             ...preset,
             id: this.nextPlanetId++,
-            name: this.generatePlanetName(), // Generate procedural name instead of using preset name
+            name: this.generatePlanetName(),
             worldType: preset.worldType || 'sphere',
-            orbitalRadius: orbitalRadius,
+            orbitalRadius: isStarCentered ? (preset.orbitalRadius || 0) : orbitalRadius,
             gravityRadius: orbitalRadius * 0.6,
-            axialTilt: preset.axialTilt !== undefined ? preset.axialTilt : Math.random() * 30, // 0-30 degrees
-            rotationSpeed: preset.rotationSpeed || (0.0005 + Math.random() * 0.002), // Random spin
-            orbitalSpeed: preset.orbitalSpeed || (0.0001 + Math.random() * 0.0005), // Random orbit speed
-            gasGiantOnly: preset.gasGiantOnly || false // EXPLICITLY preserve gasGiantOnly flag
+            axialTilt: preset.axialTilt !== undefined ? preset.axialTilt : Math.random() * 30, 
+            rotationSpeed: preset.rotationSpeed || (0.0005 + Math.random() * 0.002), 
+            orbitalSpeed: preset.orbitalSpeed || (0.0001 + Math.random() * 0.0005), 
+            gasGiantOnly: preset.gasGiantOnly || false 
         } : {
             id: this.nextPlanetId++,
             name: this.generatePlanetName(),
             type: 'terrestrial',
             worldType: 'sphere',
-            radius: 20, // blocks
+            radius: 20, 
             orbitalRadius: orbitalRadius,
             gravityRadius: orbitalRadius * 0.6,
             orbitalPeriod: 365,
             rotationPeriod: 24,
-            axialTilt: Math.random() * 30, // 0-30 degrees random tilt
-            rotationSpeed: 0.0005 + Math.random() * 0.002, // Random rotation speed
-            orbitalSpeed: 0.0001 + Math.random() * 0.0005, // Random orbital speed
+            axialTilt: Math.random() * 30, 
+            rotationSpeed: 0.0005 + Math.random() * 0.002, 
+            orbitalSpeed: 0.0001 + Math.random() * 0.0005, 
             waterLevel: 0,
             waterCoverage: 0,
             terrainAmplitude: 1000,
@@ -1794,15 +1874,15 @@ export class SystemConfigTabSimplified {
 
         this.planets.push(newPlanet);
 
-        // Auto-select the newly added planet
+        
         this.selectedPlanetId = newPlanet.id;
         
-        // Re-render
+        
         if (this.generator) {
             this.generator.showSystemTab();
         }
         
-        // Update preview after DOM updates
+        
         setTimeout(() => this.updatePreview(), 100);
     }
     
@@ -1812,12 +1892,12 @@ export class SystemConfigTabSimplified {
     removePlanet(planetId) {
         this.planets = this.planets.filter(p => p.id !== planetId);
         
-        // Re-render
+        
         if (this.generator) {
             this.generator.showSystemTab();
         }
         
-        // Update preview after DOM updates
+        
         setTimeout(() => this.updatePreview(), 100);
     }
     
@@ -1929,17 +2009,17 @@ export class SystemConfigTabSimplified {
      * Load a configuration
      */
     loadConfiguration(config) {
-        // Load star settings
+        
         if (config.star) {
             document.getElementById('star-type').value = config.star.type;
             document.getElementById('star-radius').value = config.star.radius;
         }
         
-        // Load planets
+        
         this.planets = config.planets || [];
         this.nextPlanetId = Math.max(...this.planets.map(p => p.id), 0) + 1;
         
-        // Re-render
+        
         if (this.generator) {
             this.generator.showSystemTab();
         }
@@ -1951,7 +2031,7 @@ export class SystemConfigTabSimplified {
      * Attach event listeners after rendering
      */
     attachEventListeners() {
-        // Initialize 3D preview
+        
         setTimeout(() => {
             if (this.previewRenderer) {
                 this.previewRenderer.init();
@@ -1964,7 +2044,7 @@ export class SystemConfigTabSimplified {
      * Update 3D preview with current configuration
      */
     updatePreview() {
-        // Trigger UniverseCreationModal to redraw planets and orbits with updated configs
+        
         if (this.generator && this.generator.renderConfiguredPlanets) {
             this.generator.renderConfiguredPlanets();
         }
@@ -1976,21 +2056,21 @@ export class SystemConfigTabSimplified {
     autoSpacePlanets() {
         console.log(' Auto-spacing planets to prevent collisions...');
         
-        // Sort planets by current orbital radius
+        
         this.planets.sort((a, b) => (a.orbitalRadius || 0) - (b.orbitalRadius || 0));
         
-        let currentRadius = 100; // Start first planet at 100 units
+        let currentRadius = 100; 
         
         this.planets.forEach((planet, index) => {
             const planetRadius = planet.radius || 20;
             const gravityRadius = planet.gravityRadius || planetRadius;
             const minSeparation = gravityRadius * 2.5;
             
-            // Ensure this planet is far enough from the previous
+            
             if (index > 0) {
                 const prevPlanet = this.planets[index - 1];
                 const prevGravity = prevPlanet.gravityRadius || prevPlanet.radius || 20;
-                const minDistance = prevGravity + gravityRadius + 50; // 50 units buffer
+                const minDistance = prevGravity + gravityRadius + 50; 
                 
                 currentRadius = Math.max(
                     currentRadius + minDistance,
@@ -2002,7 +2082,7 @@ export class SystemConfigTabSimplified {
             console.log(`Planet ${planet.name}: orbital radius set to ${currentRadius}`);
         });
         
-        // Re-render and update preview
+        
         if (this.generator) {
             this.generator.showSystemTab();
         }
@@ -2014,7 +2094,7 @@ export class SystemConfigTabSimplified {
      * Get complete system configuration
      */
     getSystemConfig() {
-        // Use the configured asteroid settings
+        
         const asteroidBelt = this.asteroidConfig.enabled ? {
             innerRadius: this.asteroidConfig.innerRadius,
             outerRadius: this.asteroidConfig.outerRadius,
@@ -2032,7 +2112,7 @@ export class SystemConfigTabSimplified {
             },
             planets: this.planets.map(p => ({
                 ...p,
-                // Ensure all properties are present from toggles
+                
                 waterLevel: p.showWater ? (p.waterLevel || 0) : 0,
                 waterCoverage: p.showWater ? (p.waterCoverage || 70) : 0,
                 terrainAmplitude: p.showTerrain ? (p.terrainAmplitude || 1000) : 100,
@@ -2040,22 +2120,21 @@ export class SystemConfigTabSimplified {
                 hasAtmosphere: p.showAtmosphere || false,
                 atmosphereComposition: p.showAtmosphere ? (p.atmosphereComposition || 'earth-like') : null,
                 gasGiantOnly: p.gasGiantOnly || false,
-                // Orbital mechanics from toggles
+                
                 tidalLocked: p.showOrbital ? (p.tidalLocked || false) : false,
                 orbitalPeriod: p.showOrbital ? (p.orbitalPeriod || 365) : 365,
                 rotationPeriod: p.showOrbital ? (p.rotationPeriod || 24) : 24,
-                // CRITICAL: Include physics and biomes!
                 gravity: p.gravity || 1.0,
                 mass: p.mass || 1.0,
                 density: p.density || 5.5,
                 biomeDistribution: p.biomeDistribution || { temperate: 1.0 },
                 axialTilt: p.showOrbital ? (p.axialTilt || 0) : 0,
-                // Exotic properties
+                
                 geometry: p.geometry,
                 quantumFlux: p.quantumFlux,
                 dimensionCount: p.dimensionCount
             })),
-            // Include asteroid belt if enabled
+            
             asteroidBelts: asteroidBelt ? [asteroidBelt] : [],
             features: {
                 asteroids: true,
@@ -2085,7 +2164,7 @@ export class SystemConfigTabSimplified {
         this.moons.push(newMoon);
         console.log(`Added moon ${moonName} to planet ${planetId}`);
 
-        // Re-render if in editing mode
+        
         if (this.generator && this.generator.editingMode === 'planet') {
             const planet = this.planets.find(p => p.id === planetId);
             if (planet) {
@@ -2142,7 +2221,7 @@ export class SystemConfigTabSimplified {
             this.moons.splice(index, 1);
             console.log(`Removed moon ${moonId}`);
 
-            // Re-render if in editing mode
+            
             if (this.generator && this.generator.editingMode === 'planet' && this.generator.editingPlanet) {
                 this.generator.enterPlanetEditingMode(this.generator.editingPlanet);
             }
