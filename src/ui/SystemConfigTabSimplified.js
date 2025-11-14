@@ -41,7 +41,7 @@ export class SystemConfigTabSimplified {
         
         this.planetPresets = {
             'earth': {
-                name: 'Terra',
+                name: 'Earthlike',
                 type: 'terrestrial',
                 radius: 20, 
                 orbitalRadius: 150, 
@@ -70,7 +70,7 @@ export class SystemConfigTabSimplified {
                 }
             },
             'mars': {
-                name: 'Rust',
+                name: 'Barren',
                 type: 'martian',
                 radius: 10, 
                 orbitalRadius: 228, 
@@ -95,7 +95,7 @@ export class SystemConfigTabSimplified {
                 }
             },
             'jupiter': {
-                name: 'Giant',
+                name: 'Gas Giant',
                 type: 'jovian',
                 radius: 70, 
                 orbitalRadius: 520, 
@@ -168,7 +168,7 @@ export class SystemConfigTabSimplified {
                 }
             },
             'lava': {
-                name: 'Vulcan',
+                name: 'Stone',
                 type: 'lava_world',
                 radius: 18, 
                 orbitalRadius: 50, 
@@ -755,7 +755,7 @@ export class SystemConfigTabSimplified {
                                     border-radius: 10px;
                                     z-index: 15;
                                     pointer-events: none;
-                                ">System Preview</h3>
+                                ">Preview</h3>
 
                                 <!-- Preview Mode Toggle Buttons - Overlay on preview -->
                                 <div style="
@@ -767,6 +767,19 @@ export class SystemConfigTabSimplified {
                                     gap: 6px;
                                     z-index: 15;
                                 ">
+                                    <button class="preview-mode-btn" data-mode="supercluster" style="
+                                        padding: 4px 12px;
+                                        background: rgba(0, 255, 255, 0.1);
+                                        color: #00FFFF;
+                                        border: 1px solid #00FFFF;
+                                        border-radius: 4px;
+                                        font-size: 10px;
+                                        cursor: pointer;
+                                        transition: all 0.2s;
+                                        backdrop-filter: blur(5px);
+                                    " onclick="window.systemGenerator?.toggleSuperclusterView()" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 255, 0.1)'">
+                                        SUPERCLUSTER
+                                    </button>
                                     <button class="preview-mode-btn" data-mode="galaxy" style="
                                         padding: 4px 12px;
                                         background: rgba(100, 100, 255, 0.2);
@@ -805,19 +818,6 @@ export class SystemConfigTabSimplified {
                                         backdrop-filter: blur(5px);
                                     " onclick="window.systemGenerator?.setPreviewMode('planet')">
                                         PLANET
-                                    </button>
-                                    <button class="preview-mode-btn" data-mode="supercluster" style="
-                                        padding: 4px 12px;
-                                        background: rgba(0, 255, 255, 0.1);
-                                        color: #00FFFF;
-                                        border: 1px solid #00FFFF;
-                                        border-radius: 4px;
-                                        font-size: 10px;
-                                        cursor: pointer;
-                                        transition: all 0.2s;
-                                        backdrop-filter: blur(5px);
-                                    " onclick="window.systemGenerator?.toggleSuperclusterView()" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 255, 0.1)'">
-                                        SUPERCLUSTER
                                     </button>
                                 </div>
 
@@ -895,7 +895,7 @@ export class SystemConfigTabSimplified {
                             box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
                             margin-bottom: 4px;
                             transition: all 0.2s;
-                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 0, 0.1)'">GENERATE<br>SYSTEM</button>
+                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 0, 0.1)'">GENERATE</button>
 
                         <!-- Add to Cluster button -->
                         <button onclick="window.systemGenerator.addSystemToCluster()" style="
@@ -1000,11 +1000,11 @@ export class SystemConfigTabSimplified {
      */
     renderCompactPresetButtons() {
         const presets = [
-            { key: 'earth', name: 'Terra', borderColor: '#4169E1', baseBg: 'rgba(65, 105, 225, 0.1)' },
-            { key: 'mars', name: 'Rust', borderColor: '#CD5C5C', baseBg: 'rgba(205, 92, 92, 0.1)' },
-            { key: 'jupiter', name: 'Giant', borderColor: '#DEB887', baseBg: 'rgba(222, 184, 135, 0.1)' },
+            { key: 'earth', name: 'Earthlike', borderColor: '#4169E1', baseBg: 'rgba(65, 105, 225, 0.1)' },
+            { key: 'mars', name: 'Barren', borderColor: '#CD5C5C', baseBg: 'rgba(205, 92, 92, 0.1)' },
+            { key: 'jupiter', name: 'Gas Giant', borderColor: '#DEB887', baseBg: 'rgba(222, 184, 135, 0.1)' },
             { key: 'ice', name: 'Frozen', borderColor: '#87CEEB', baseBg: 'rgba(135, 206, 235, 0.1)' },
-            { key: 'lava', name: 'Vulcan', borderColor: '#FF4500', baseBg: 'rgba(255, 69, 0, 0.1)' },
+            { key: 'lava', name: 'Stone', borderColor: '#FF4500', baseBg: 'rgba(255, 69, 0, 0.1)' },
             { key: 'ring', name: 'Halo', borderColor: '#FFD700', baseBg: 'rgba(255, 215, 0, 0.1)' }
         ];
 
@@ -1125,19 +1125,23 @@ export class SystemConfigTabSimplified {
                     </div>
                 </div>
 
-                <!-- Year Speed Slider & Asteroid Belt -->
+                <!-- Year Speed Slider -->
                 <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 2px;" onclick="event.stopPropagation()">
                     <label style="color: #888; font-size: 9px; white-space: nowrap;">Year Speed</label>
-                    <input type="range" value="${Math.round((planet.orbitalSpeed || 0.0003) * 10000)}" min="0" max="100" step="1" class="polymir-input" style="width: 70px !important; flex-shrink: 0;"
+                    <input type="range" value="${Math.round((planet.orbitalSpeed || 0.0003) * 10000)}" min="0" max="100" step="1" class="polymir-input" style="width: 100px !important; flex-shrink: 0;"
                            oninput="window.systemConfigTab.updatePlanet(${planet.id}, 'orbitalSpeed', parseFloat(this.value) / 10000)">
-                    ${!isMoon ? `
-                        <label style="display: flex; align-items: center; gap: 2px; color: #888; font-size: 8px; white-space: nowrap;">
+                </div>
+
+                ${!isMoon ? `
+                    <!-- Asteroid Belt Checkbox -->
+                    <div style="margin-bottom: 2px;">
+                        <label style="display: flex; align-items: center; gap: 2px; color: #888; font-size: 9px;">
                             <input type="checkbox" ${planet.hasAsteroidBelt ? 'checked' : ''}
                                    onchange="window.systemConfigTab.updatePlanet(${planet.id}, 'hasAsteroidBelt', this.checked)">
-                            Ast. Belt
+                            Asteroid Belt
                         </label>
-                    ` : ''}
-                </div>
+                    </div>
+                ` : ''}
 
                 ${!isMoon ? `
                     <!-- Structures Checkbox -->

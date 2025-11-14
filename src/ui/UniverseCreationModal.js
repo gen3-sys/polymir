@@ -382,6 +382,39 @@ class SystemGeneratorMenuEnhanced {
             `).join('');
 
             superclusterContent.innerHTML = `
+                <!-- Supercluster Properties -->
+                <div style="background: rgba(0, 100, 200, 0.1); border: 2px solid #00FFFF; border-radius: 10px; padding: 15px; margin-bottom: 20px;">
+                    <h3 style="color: #00FFFF; margin: 0 0 10px 0; font-size: 13px;">Supercluster Properties</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                        <div>
+                            <label style="color: #888; display: block; margin-bottom: 5px; font-size: 10px;">Name</label>
+                            <input type="text" value="Laniakea" style="
+                                width: 100%;
+                                padding: 6px;
+                                background: rgba(0, 0, 0, 0.5);
+                                color: #00FF00;
+                                border: 1px solid #00FF00;
+                                border-radius: 4px;
+                                font-size: 11px;
+                            ">
+                        </div>
+                        <div>
+                            <label style="color: #888; display: block; margin-bottom: 5px; font-size: 10px;">Systems in Cluster</label>
+                            <input type="number" value="${this.clusterSystems.length}" readonly style="
+                                width: 100%;
+                                padding: 6px;
+                                background: rgba(0, 0, 0, 0.7);
+                                color: #FFD700;
+                                border: 1px solid #00FF00;
+                                border-radius: 4px;
+                                font-size: 11px;
+                            ">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Systems Grid -->
+                <h3 style="color: #FE0089; margin: 0 0 10px 0; font-size: 13px;">Systems in Cluster (${this.clusterSystems.length})</h3>
                 <div style="
                     display: grid;
                     grid-template-columns: repeat(5, 180px);
@@ -838,9 +871,6 @@ class SystemGeneratorMenuEnhanced {
         const tabNav = document.createElement('div');
         tabNav.style.cssText = 'display: flex; background: rgba(254, 0, 137, 0.1); border-bottom: 2px solid #FE0089;';
         tabNav.innerHTML = `
-            <button class="tab-btn" data-tab="supercluster" style="flex: 1; padding: 10px; background: transparent; color: #FE0089; border: none; cursor: pointer; font-weight: bold; font-size: 13px;">
-                SUPERCLUSTER
-            </button>
             <button class="tab-btn active" data-tab="system" style="flex: 1; padding: 10px; background: rgba(254, 0, 137, 0.2); color: #FE0089; border: none; cursor: pointer; font-weight: bold; font-size: 13px;">
                 SYSTEM/GALAXY
             </button>
@@ -874,112 +904,6 @@ class SystemGeneratorMenuEnhanced {
         }, 0);
     }
     
-    /**
-     * Show supercluster configuration tab
-     */
-    showSuperclusterTab() {
-        const tabBtns = document.querySelectorAll('.tab-btn');
-        tabBtns.forEach(btn => {
-            btn.style.background = 'transparent';
-            btn.classList.remove('active');
-            if (btn.dataset.tab === 'supercluster') {
-                btn.style.background = 'rgba(0, 255, 255, 0.2)';
-                btn.classList.add('active');
-            }
-        });
-
-        this.currentTab = 'supercluster';
-
-        const content = document.getElementById('tab-content');
-
-        const systemCards = this.clusterSystems.map(sys => `
-            <div style="background: rgba(0, 0, 0, 0.3); padding: 15px; border-radius: 10px; border: 1px solid #6B8AFF;">
-                <h4 style="color: #FFD700; margin: 0 0 10px 0;">${sys.name}</h4>
-                <p style="color: #888; font-size: 12px; margin: 0 0 10px 0;">Added ${new Date(sys.timestamp).toLocaleTimeString()}</p>
-                <div style="color: #00FF00; font-size: 11px;">
-                    <div>Planets: ${sys.config.planets?.length || 0}</div>
-                    <div>Star: ${sys.config.star?.type || 'yellow'}</div>
-                </div>
-                <div style="display: flex; gap: 5px; margin-top: 10px;">
-                    <button onclick="window.systemGenerator.loadClusterSystem('${sys.id}')" style="
-                        flex: 1;
-                        padding: 5px 10px;
-                        background: #6B8AFF;
-                        color: white;
-                        border: none;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        font-size: 11px;
-                    ">Load</button>
-                    <button onclick="window.systemGenerator.removeClusterSystem('${sys.id}')" style="
-                        padding: 5px 10px;
-                        background: #FF0000;
-                        color: white;
-                        border: none;
-                        border-radius: 5px;
-                        cursor: pointer;
-                        font-size: 11px;
-                    ">Remove</button>
-                </div>
-            </div>
-        `).join('');
-
-        content.innerHTML = `
-            <div style="padding: 20px;">
-                <h2 style="color: #FFD700; margin-bottom: 20px;">Supercluster Configuration</h2>
-
-                <div style="background: rgba(0, 100, 200, 0.1); border: 2px solid #00FFFF; border-radius: 15px; padding: 20px; margin-bottom: 20px;">
-                    <h3 style="color: #00FFFF; margin-bottom: 15px;">Supercluster Properties</h3>
-
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
-                        <div>
-                            <label style="color: #00FF00; display: block; margin-bottom: 5px;">Name</label>
-                            <input type="text" value="Laniakea" style="
-                                width: 100%;
-                                padding: 8px;
-                                background: rgba(0, 0, 0, 0.5);
-                                color: #00FF00;
-                                border: 1px solid #00FF00;
-                                border-radius: 5px;
-                            ">
-                        </div>
-
-                        <div>
-                            <label style="color: #00FF00; display: block; margin-bottom: 5px;">Systems in Cluster</label>
-                            <input type="number" value="${this.clusterSystems.length}" readonly style="
-                                width: 100%;
-                                padding: 8px;
-                                background: rgba(0, 0, 0, 0.7);
-                                color: #FFD700;
-                                border: 1px solid #00FF00;
-                                border-radius: 5px;
-                            ">
-                        </div>
-                    </div>
-                </div>
-
-                <div style="background: rgba(254, 0, 137, 0.1); border: 2px solid #FE0089; border-radius: 15px; padding: 20px;">
-                    <h3 style="color: #FE0089; margin-bottom: 15px;">Systems in Cluster (${this.clusterSystems.length})</h3>
-
-                    ${this.clusterSystems.length === 0 ? `
-                        <div style="text-align: center; padding: 40px; color: #888;">
-                            <p>No systems added yet.</p>
-                            <p style="font-size: 12px; margin-top: 10px;">Configure a system in the SYSTEM/GALAXY tab and click "ADD TO CLUSTER"</p>
-                        </div>
-                    ` : `
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-                            ${systemCards}
-                        </div>
-                    `}
-                </div>
-
-                <div style="margin-top: 20px; text-align: center; color: #888; font-size: 14px;">
-                    Configure individual star systems in the SYSTEM/GALAXY tab
-                </div>
-            </div>
-        `;
-    }
-
     /**
      * Show system configuration tab
      */
@@ -1280,6 +1204,7 @@ class SystemGeneratorMenuEnhanced {
                     padding: 20px;
                     border-radius: 12px;
                     overflow-y: auto;
+                    overflow-x: hidden;
                     box-shadow: 0 4px 20px rgba(0, 255, 255, 0.1);
                 ">
                     <h3 style="
@@ -1374,13 +1299,15 @@ class SystemGeneratorMenuEnhanced {
                             <strong>Furniture</strong> items are recolorable. <strong>Objects</strong> are detailed items with fixed colors and emissive lighting.
                         </div>
                     </div>
-                    <div id="schematic-grid-wrapper" style="flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0;">
+                    <div id="schematic-grid-wrapper" style="flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; max-width: 100%;">
                         <div id="schematic-grid" style="
                             display: grid;
                             grid-template-columns: repeat(4, 1fr);
                             gap: 20px;
                             align-items: start;
                             padding-bottom: 20px;
+                            width: 100%;
+                            max-width: 100%;
                         ">
                         ${this.createSchematicThumbnails()}
                     </div>
@@ -1839,7 +1766,6 @@ class SystemGeneratorMenuEnhanced {
                 this.currentTab = tab;
 
                 switch(tab) {
-                    case 'supercluster': this.showSuperclusterTab(); break;
                     case 'system': this.showSystemTab(); break;
                     case 'biomes': this.showBiomesTab(); break;
                     case 'library': this.showLibraryTab(); break;
@@ -2062,7 +1988,8 @@ class SystemGeneratorMenuEnhanced {
         if (confirm(`Remove "${system.name}" from cluster?`)) {
             this.clusterSystems = this.clusterSystems.filter(s => s.id !== systemId);
             console.log(`System "${system.name}" removed. Remaining systems: ${this.clusterSystems.length}`);
-            this.showSuperclusterTab();
+            this.toggleSuperclusterView();
+            this.toggleSuperclusterView();
         }
     }
 
