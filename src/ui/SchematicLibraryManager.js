@@ -1166,7 +1166,7 @@ export class SchematicLibraryManager {
             
 
             const sharing = this.sharingOptions.get(schematicId) || {};
-            sharing.serverUrl = `https://polymir.io/schematics/${schematicId}`;
+            sharing.serverUrl = `https://polymir.example.com/schematics/${schematicId}`;
             sharing.uploadDate = Date.now();
             this.sharingOptions.set(schematicId, sharing);
             
@@ -1332,7 +1332,7 @@ export class SchematicLibraryManager {
             for (const schematicData of generatedSchematics) {
                 const { id, metadata, voxels } = schematicData;
 
-                // Use game's actual THREE.js voxel renderer
+                
                 const previewDataUrl = renderer.renderWithSampling(voxels, 2000);
 
                 const schematic = {
@@ -1363,7 +1363,7 @@ export class SchematicLibraryManager {
                 this.categories.add(schematic.category);
             }
 
-            // Clean up renderer
+            
             renderer.dispose();
 
             console.log(`[Schematics] Loaded ${generatedSchematics.length} public schematics with 3D previews`);

@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLYMIR - Portal Test V2 (Using Game Engine)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: monospace;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #00ff00;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border: 2px solid #00ff00;
+            border-radius: 5px;
+            font-size: 13px;
+            z-index: 100;
+            min-width: 200px;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #00ffff;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border: 2px solid #00ffff;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 300px;
+            z-index: 100;
+        }
+        .key {
+            color: #ffff00;
+            font-weight: bold;
+            padding: 2px 5px;
+            background: rgba(255, 255, 0, 0.2);
+            border-radius: 3px;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            pointer-events: none;
+            z-index: 50;
+        }
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(0, 255, 255, 0.9);
+            box-shadow: 0 0 4px rgba(0, 255, 255, 0.5);
+        }
+        #crosshair::before {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #crosshair::after {
+            height: 2px;
+            width: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .status {
+            margin: 6px 0;
+            padding: 3px 0;
+        }
+        .portal-status {
+            color: #ff00ff;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        h3 {
+            margin: 0 0 10px 0;
+            color: #00ffff;
+            border-bottom: 1px solid #00ffff;
+            padding-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="crosshair"></div>
+
+    <div id="ui">
+        <h3>🌀 PORTAL TEST</h3>
+        <div class="status">Mode: <span id="mode">BUILD</span></div>
+        <div class="status">Block: <span id="block-type">STONE</span></div>
+        <div class="status">FPS: <span id="fps">0</span></div>
+        <div class="status">Pos: <span id="position">0, 0, 0</span></div>
+        <hr style="border-color: #00ff00; margin: 10px 0;">
+        <div class="status">Portals: <span id="portal-count">0</span></div>
+        <div id="link-prompt" style="display: none; color: #ff00ff; font-weight: bold; margin-top: 8px;">
+            <div>🔗 Link portals?</div>
+            <div style="font-size: 11px; margin-top: 4px;">Press Y or N</div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <h3>PORTAL TEST CONTROLS</h3>
+
+        <div style="margin-bottom: 10px;">
+            <strong>MOVEMENT</strong>
+            <div><span class="key">WASD</span> Move</div>
+            <div><span class="key">SPACE</span> Up</div>
+            <div><span class="key">SHIFT</span> Down</div>
+            <div><span class="key">Mouse</span> Look (click to lock)</div>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+            <strong>BUILDING</strong>
+            <div><span class="key">LEFT CLICK</span> Place block</div>
+            <div><span class="key">RIGHT CLICK</span> Remove block</div>
+        </div>
+
+        <div style="margin-bottom: 10px;">
+            <strong>BLOCKS (1-5)</strong>
+            <div><span class="key">1</span> Stone (gray)</div>
+            <div><span class="key">2</span> Grass (green)</div>
+            <div><span class="key">3</span> Dirt (brown)</div>
+            <div><span class="key">4</span> Portal Block (cyan)</div>
+            <div><span class="key">5</span> Glass (transparent)</div>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script type="module">
+        import * as THREE from './src/lib/three.module.js';
+        import { Chunk } from './src/spatial/Chunk.js';
+        import { ChunkCoordinate } from './src/spatial/ChunkCoordinate.js';
+        import { MeshFactory } from './src/rendering/MeshFactory.js';
+        import { VOXEL_TYPES } from './src/data/voxel/VoxelTypes.js';
+
+        class PortalTestScene {
+            constructor() {
+                console.log('🌀 Initializing Portal Test Scene...');
+
+                // Core THREE.js
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: document.getElementById('canvas'),
+                    antialias: true
+                });
+
+                // World settings
+                this.chunkSize = 16;
+                this.chunks = new Map();
+                this.chunkMeshes = new Map();
+
+                // Build tool
+                this.currentBlockType = VOXEL_TYPES.STONE.id;
+                this.raycaster = new THREE.Raycaster();
+                this.raycaster.far = 100;
+
+                // Portal detection system
+                this.portals = []; // { id, blocks: [{x,y,z}], bounds, schematic, renderTarget, portalMesh, portalCamera }
+                this.nextPortalId = 1;
+                this.pendingLinkPrompt = null; // When placing first block of new portal
+                this.portalRenderSize = 1024; // Higher resolution for smoother portal views
+                this.portalRecursionDepth = 2; // Render portals through portals for recursion
+
+                // Controls
+                this.moveSpeed = 0.15;
+                this.keys = {};
+                this.mouse = { locked: false };
+
+                // Performance
+                this.lastTime = performance.now();
+                this.frameCount = 0;
+
+                this.init();
+            }
+
+            async init() {
+                this.setupRenderer();
+                this.setupLighting();
+                this.setupControls();
+                this.createFlatWorld();
+
+                this.animate();
+                console.log('✅ Portal Test Scene Ready!');
+                console.log('Click canvas to lock mouse, then use WASD to move');
+            }
+
+            setupRenderer() {
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
+                this.scene.fog = new THREE.Fog(0x87CEEB, 100, 300);
+
+                this.camera.position.set(8, 5, 8);
+                this.camera.rotation.order = 'YXZ';
+                this.camera.lookAt(0, 0, 0);
+
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                console.log('✅ Renderer setup complete');
+            }
+
+            setupLighting() {
+                const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambient);
+
+                const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+                sun.position.set(100, 200, 100);
+                sun.castShadow = false;
+                this.scene.add(sun);
+
+                console.log('✅ Lighting setup complete');
+            }
+
+            setupControls() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+
+                    // Block selection
+                    if (e.key >= '1' && e.key <= '5') {
+                        const types = [
+                            VOXEL_TYPES.STONE.id,
+                            VOXEL_TYPES.GRASS.id,
+                            VOXEL_TYPES.DIRT.id,
+                            VOXEL_TYPES.PORTAL_BLOCK.id,
+                            VOXEL_TYPES.GLASS.id
+                        ];
+                        this.currentBlockType = types[parseInt(e.key) - 1];
+                        this.updateUI();
+                    }
+
+                    // Portal linking prompt response
+                    if (this.pendingLinkPrompt) {
+                        if (e.key.toLowerCase() === 'y') {
+                            this.linkPortals(this.pendingLinkPrompt.newPortal, this.pendingLinkPrompt.targetPortal);
+                            this.pendingLinkPrompt = null;
+                        } else if (e.key.toLowerCase() === 'n') {
+                            console.log('❌ Portal linking skipped');
+                            this.pendingLinkPrompt = null;
+                        }
+                    }
+                });
+
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                });
+
+                document.addEventListener('click', () => {
+                    if (!this.mouse.locked) {
+                        document.body.requestPointerLock();
+                    }
+                });
+
+                document.addEventListener('pointerlockchange', () => {
+                    this.mouse.locked = document.pointerLockElement === document.body;
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (this.mouse.locked) {
+                        this.camera.rotation.y -= e.movementX * 0.002;
+                        this.camera.rotation.x -= e.movementY * 0.002;
+                        this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                    }
+                });
+
+                document.addEventListener('mousedown', (e) => {
+                    if (!this.mouse.locked) return;
+
+                    if (e.button === 0) { // Left click
+                        this.placeBlock();
+                    } else if (e.button === 2) { // Right click
+                        this.removeBlock();
+                    }
+                });
+
+                document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+                console.log('✅ Controls setup complete');
+            }
+
+            createFlatWorld() {
+                console.log('🌍 Creating flat world...');
+
+                // Create a 5x2x5 grid of chunks
+                for (let cx = -2; cx <= 2; cx++) {
+                    for (let cy = -1; cy <= 0; cy++) {
+                        for (let cz = -2; cz <= 2; cz++) {
+                            this.generateFlatChunk(cx, cy, cz);
+                        }
+                    }
+                }
+
+                console.log(`✅ Created ${this.chunks.size} chunks`);
+            }
+
+            generateFlatChunk(cx, cy, cz) {
+                const chunk = new Chunk(cx, cy, cz, this.chunkSize);
+                let voxelCount = 0;
+
+                // Three colors for the platform in random splotches
+                const platformColors = [
+                    { type: VOXEL_TYPES.GRASS.id, color: 0x44AA44 },  // Green
+                    { type: VOXEL_TYPES.DIRT.id, color: 0x8B4513 },   // Brown
+                    { type: VOXEL_TYPES.STONE.id, color: 0x888888 }   // Gray
+                ];
+
+                for (let x = 0; x < this.chunkSize; x++) {
+                    for (let z = 0; z < this.chunkSize; z++) {
+                        for (let y = 0; y < this.chunkSize; y++) {
+                            const worldY = cy * this.chunkSize + y;
+                            const worldX = cx * this.chunkSize + x;
+                            const worldZ = cz * this.chunkSize + z;
+
+                            // Flat terrain: bedrock at -16, stone -15 to -1, colored platform at 0
+                            if (worldY === -16) {
+                                chunk.setVoxel(x, y, z, {
+                                    type: VOXEL_TYPES.BEDROCK.id,
+                                    color: VOXEL_TYPES.BEDROCK.color
+                                });
+                                voxelCount++;
+                            } else if (worldY > -16 && worldY < 0) {
+                                chunk.setVoxel(x, y, z, {
+                                    type: VOXEL_TYPES.STONE.id,
+                                    color: VOXEL_TYPES.STONE.color
+                                });
+                                voxelCount++;
+                            } else if (worldY === 0) {
+                                // Random splotchy pattern using world coords as seed
+                                const hash = (worldX * 73856093) ^ (worldZ * 19349663);
+                                const colorIndex = Math.abs(hash) % 3;
+                                const colorData = platformColors[colorIndex];
+
+                                chunk.setVoxel(x, y, z, {
+                                    type: colorData.type,
+                                    color: colorData.color
+                                });
+                                voxelCount++;
+                            }
+                        }
+                    }
+                }
+
+                const key = ChunkCoordinate.toKey(cx, cy, cz);
+                this.chunks.set(key, chunk);
+
+                if (voxelCount > 0) {
+                    this.rebuildChunkMesh(cx, cy, cz);
+                }
+            }
+
+            rebuildChunkMesh(cx, cy, cz) {
+                const key = ChunkCoordinate.toKey(cx, cy, cz);
+                const chunk = this.chunks.get(key);
+                if (!chunk) return;
+
+                // Remove old mesh
+                const oldMesh = this.chunkMeshes.get(key);
+                if (oldMesh) {
+                    this.scene.remove(oldMesh);
+                    MeshFactory.disposeMesh(oldMesh);
+                }
+
+                // Build new geometry
+                const geometryData = chunk.buildMesh((chunkX, chunkY, chunkZ, localX, localY, localZ) => {
+                    return this.neighborLookup(chunkX, chunkY, chunkZ, localX, localY, localZ);
+                });
+
+                if (geometryData && geometryData.vertices && geometryData.vertices.length > 0) {
+                    const material = new THREE.MeshLambertMaterial({
+                        vertexColors: true
+                    });
+
+                    const mesh = MeshFactory.createChunkMesh(geometryData, material);
+                    this.scene.add(mesh);
+                    this.chunkMeshes.set(key, mesh);
+                }
+            }
+
+            neighborLookup(chunkX, chunkY, chunkZ, localX, localY, localZ) {
+                const neighborChunkX = chunkX + (localX < 0 ? -1 : (localX >= this.chunkSize ? 1 : 0));
+                const neighborChunkY = chunkY + (localY < 0 ? -1 : (localY >= this.chunkSize ? 1 : 0));
+                const neighborChunkZ = chunkZ + (localZ < 0 ? -1 : (localZ >= this.chunkSize ? 1 : 0));
+
+                const neighborKey = ChunkCoordinate.toKey(neighborChunkX, neighborChunkY, neighborChunkZ);
+                const neighborChunk = this.chunks.get(neighborKey);
+
+                if (!neighborChunk) return false;
+
+                const nx = ((localX % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const ny = ((localY % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const nz = ((localZ % this.chunkSize) + this.chunkSize) % this.chunkSize;
+
+                return neighborChunk.hasVoxel(nx, ny, nz);
+            }
+
+            raycast() {
+                const direction = new THREE.Vector3(0, 0, -1);
+                direction.applyQuaternion(this.camera.quaternion);
+
+                this.raycaster.set(this.camera.position, direction);
+
+                const meshes = Array.from(this.chunkMeshes.values());
+                const intersects = this.raycaster.intersectObjects(meshes);
+
+                return intersects.length > 0 ? intersects[0] : null;
+            }
+
+            placeBlock() {
+                const hit = this.raycast();
+
+                if (!hit || !hit.point || !hit.face) {
+                    console.log('❌ No hit detected. Meshes:', this.chunkMeshes.size);
+                    return;
+                }
+
+                // Get normal from face
+                const normal = hit.face.normal;
+
+                // Calculate block position (on the face we hit)
+                const position = hit.point.clone().add(normal.clone().multiplyScalar(0.5));
+                const blockPos = {
+                    x: Math.floor(position.x),
+                    y: Math.floor(position.y),
+                    z: Math.floor(position.z)
+                };
+
+                console.log('✅ Placing block at:', blockPos, 'Type:', this.currentBlockType);
+
+                // Store the face normal for portal blocks (will be used when creating new portal)
+                this.lastPlacedNormal = normal;
+
+                this.setBlock(blockPos.x, blockPos.y, blockPos.z, this.currentBlockType);
+            }
+
+            removeBlock() {
+                const hit = this.raycast();
+
+                if (!hit || !hit.point || !hit.face) {
+                    console.log('❌ No hit detected for removal');
+                    return;
+                }
+
+                // Get normal from face
+                const normal = hit.face.normal;
+
+                // Calculate block position (inside the face we hit)
+                const position = hit.point.clone().sub(normal.clone().multiplyScalar(0.5));
+                const blockPos = {
+                    x: Math.floor(position.x),
+                    y: Math.floor(position.y),
+                    z: Math.floor(position.z)
+                };
+
+                console.log('✅ Removing block at:', blockPos);
+                this.setBlock(blockPos.x, blockPos.y, blockPos.z, null);
+            }
+
+            setBlock(worldX, worldY, worldZ, blockType) {
+                const chunkX = Math.floor(worldX / this.chunkSize);
+                const chunkY = Math.floor(worldY / this.chunkSize);
+                const chunkZ = Math.floor(worldZ / this.chunkSize);
+
+                const localX = ((worldX % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const localY = ((worldY % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const localZ = ((worldZ % this.chunkSize) + this.chunkSize) % this.chunkSize;
+
+                const key = ChunkCoordinate.toKey(chunkX, chunkY, chunkZ);
+                const chunk = this.chunks.get(key);
+
+                if (!chunk) return;
+
+                const wasPortalBlock = this.getBlockType(worldX, worldY, worldZ) === VOXEL_TYPES.PORTAL_BLOCK.id;
+
+                if (blockType === null) {
+                    // Remove block
+                    chunk.voxels.delete(Chunk.encodeKey(localX, localY, localZ));
+                    chunk.dirty = true;
+
+                    // Handle portal removal
+                    if (wasPortalBlock) {
+                        this.onPortalBlockRemoved(worldX, worldY, worldZ);
+                    }
+                } else {
+                    // Place block
+                    const voxelType = Object.values(VOXEL_TYPES).find(t => t.id === blockType);
+                    chunk.setVoxel(localX, localY, localZ, {
+                        type: blockType,
+                        color: voxelType.color
+                    });
+
+                    // Handle portal placement
+                    if (blockType === VOXEL_TYPES.PORTAL_BLOCK.id) {
+                        this.onPortalBlockPlaced(worldX, worldY, worldZ);
+                    }
+                }
+
+                this.rebuildChunkMesh(chunkX, chunkY, chunkZ);
+                this.rebuildAdjacentChunks(chunkX, chunkY, chunkZ, localX, localY, localZ);
+                this.updateUI();
+            }
+
+            rebuildAdjacentChunks(cx, cy, cz, localX, localY, localZ) {
+                if (localX === 0) this.rebuildChunkMesh(cx - 1, cy, cz);
+                if (localX === this.chunkSize - 1) this.rebuildChunkMesh(cx + 1, cy, cz);
+                if (localY === 0) this.rebuildChunkMesh(cx, cy - 1, cz);
+                if (localY === this.chunkSize - 1) this.rebuildChunkMesh(cx, cy + 1, cz);
+                if (localZ === 0) this.rebuildChunkMesh(cx, cy, cz - 1);
+                if (localZ === this.chunkSize - 1) this.rebuildChunkMesh(cx, cy, cz + 1);
+            }
+
+            // Flood fill to detect connected portal blocks
+            detectPortalStructure(startX, startY, startZ) {
+                const visited = new Set();
+                const blocks = [];
+                const queue = [[startX, startY, startZ]];
+                visited.add(`${startX},${startY},${startZ}`);
+
+                while (queue.length > 0) {
+                    const [x, y, z] = queue.shift();
+                    blocks.push({ x, y, z });
+
+                    // Check 6 adjacent blocks
+                    const neighbors = [
+                        [x+1, y, z], [x-1, y, z],
+                        [x, y+1, z], [x, y-1, z],
+                        [x, y, z+1], [x, y, z-1]
+                    ];
+
+                    for (const [nx, ny, nz] of neighbors) {
+                        const key = `${nx},${ny},${nz}`;
+                        if (visited.has(key)) continue;
+
+                        // Check if this block is a portal block
+                        if (this.getBlockType(nx, ny, nz) === VOXEL_TYPES.PORTAL_BLOCK.id) {
+                            visited.add(key);
+                            queue.push([nx, ny, nz]);
+                        }
+                    }
+                }
+
+                return blocks;
+            }
+
+            getBlockType(worldX, worldY, worldZ) {
+                const chunkX = Math.floor(worldX / this.chunkSize);
+                const chunkY = Math.floor(worldY / this.chunkSize);
+                const chunkZ = Math.floor(worldZ / this.chunkSize);
+
+                const localX = ((worldX % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const localY = ((worldY % this.chunkSize) + this.chunkSize) % this.chunkSize;
+                const localZ = ((worldZ % this.chunkSize) + this.chunkSize) % this.chunkSize;
+
+                const key = ChunkCoordinate.toKey(chunkX, chunkY, chunkZ);
+                const chunk = this.chunks.get(key);
+                if (!chunk) return null;
+
+                const voxel = chunk.getVoxel(localX, localY, localZ);
+                return voxel ? voxel.type : null;
+            }
+
+            // Normalize vector to cardinal direction based on largest magnitude component
+            normalizeToCardinal(normal) {
+                const absX = Math.abs(normal.x);
+                const absY = Math.abs(normal.y);
+                const absZ = Math.abs(normal.z);
+
+                if (absX >= absY && absX >= absZ) {
+                    return { x: normal.x > 0 ? 1 : -1, y: 0, z: 0 };
+                } else if (absY >= absX && absY >= absZ) {
+                    return { x: 0, y: normal.y > 0 ? 1 : -1, z: 0 };
+                } else {
+                    return { x: 0, y: 0, z: normal.z > 0 ? 1 : -1 };
+                }
+            }
+
+            createPortalSchematic(blocks, portalNormal, placementRotation) {
+                // Calculate bounds
+                const bounds = {
+                    min: { x: Infinity, y: Infinity, z: Infinity },
+                    max: { x: -Infinity, y: -Infinity, z: -Infinity }
+                };
+
+                blocks.forEach(({ x, y, z }) => {
+                    bounds.min.x = Math.min(bounds.min.x, x);
+                    bounds.min.y = Math.min(bounds.min.y, y);
+                    bounds.min.z = Math.min(bounds.min.z, z);
+                    bounds.max.x = Math.max(bounds.max.x, x);
+                    bounds.max.y = Math.max(bounds.max.y, y);
+                    bounds.max.z = Math.max(bounds.max.z, z);
+                });
+
+                // Create schematic data (like .mvox format)
+                const schematic = {
+                    type: 'PORTAL',
+                    version: 1,
+                    created: Date.now(),
+                    bounds: bounds,
+                    blockCount: blocks.length,
+                    blocks: blocks.map(b => ({ ...b, type: VOXEL_TYPES.PORTAL_BLOCK.id })),
+                    // Portal-specific metadata
+                    linkedTo: null,
+                    placementRotation: placementRotation || { yaw: 0, pitch: 0 }, // Player's view angles when placing
+                    normal: portalNormal // The face that acts as the portal gateway
+                };
+
+                return schematic;
+            }
+
+            onPortalBlockPlaced(worldX, worldY, worldZ) {
+                // Detect if this connects to an existing portal structure
+                const existingPortal = this.portals.find(p =>
+                    p.blocks.some(b => {
+                        const dist = Math.abs(b.x - worldX) + Math.abs(b.y - worldY) + Math.abs(b.z - worldZ);
+                        return dist === 1; // Adjacent
+                    })
+                );
+
+                if (existingPortal) {
+                    // Extend existing portal
+                    existingPortal.blocks.push({ x: worldX, y: worldY, z: worldZ });
+                    existingPortal.schematic = this.createPortalSchematic(
+                        existingPortal.blocks,
+                        existingPortal.schematic.normal,
+                        existingPortal.schematic.placementRotation
+                    );
+                    console.log(`🌀 Extended portal #${existingPortal.id} (${existingPortal.blocks.length} blocks)`);
+                } else {
+                    // New portal structure started - capture player rotation
+                    const cardinalNormal = this.lastPlacedNormal
+                        ? this.normalizeToCardinal(this.lastPlacedNormal)
+                        : { x: 0, y: 0, z: 1 }; // Default to +Z if no normal stored
+
+                    // Snap player's yaw to cardinal directions (0°, 90°, 180°, 270°)
+                    const rawYaw = this.camera.rotation.y;
+                    const cardinalYaw = Math.round(rawYaw / (Math.PI / 2)) * (Math.PI / 2);
+
+                    const placementRotation = {
+                        yaw: cardinalYaw,  // Snapped to cardinal directions
+                        pitch: this.camera.rotation.x
+                    };
+
+                    const blocks = this.detectPortalStructure(worldX, worldY, worldZ);
+                    const schematic = this.createPortalSchematic(blocks, cardinalNormal, placementRotation);
+
+                    const newPortal = {
+                        id: this.nextPortalId++,
+                        blocks: blocks,
+                        bounds: schematic.bounds,
+                        schematic: schematic,
+                        linkedTo: null
+                    };
+
+                    this.portals.push(newPortal);
+                    console.log(`🌀 Created new portal #${newPortal.id} (${blocks.length} blocks)`);
+                    console.log(`   Portal normal: [${cardinalNormal.x}, ${cardinalNormal.y}, ${cardinalNormal.z}]`);
+                    console.log(`   Placement rotation: yaw=${placementRotation.yaw.toFixed(2)}, pitch=${placementRotation.pitch.toFixed(2)}`);
+
+                    // Check if there are unlinked portals to link to
+                    const unlinkedPortals = this.portals.filter(p => p.linkedTo === null && p.id !== newPortal.id);
+
+                    if (unlinkedPortals.length > 0) {
+                        this.promptLinkPortal(newPortal, unlinkedPortals[0]);
+                    }
+                }
+            }
+
+            promptLinkPortal(newPortal, targetPortal) {
+                console.log(`🔗 Link portal #${newPortal.id} to unlinked portal #${targetPortal.id}? [Y/N]`);
+                console.log(`   Press Y to link, N to skip`);
+
+                this.pendingLinkPrompt = {
+                    newPortal: newPortal,
+                    targetPortal: targetPortal
+                };
+            }
+
+            linkPortals(portalA, portalB) {
+                portalA.linkedTo = portalB.id;
+                portalB.linkedTo = portalA.id;
+                portalA.schematic.linkedTo = portalB.id;
+                portalB.schematic.linkedTo = portalA.id;
+
+                console.log(`✅ Linked portal #${portalA.id} ↔ #${portalB.id}`);
+
+                // Create portal rendering surfaces
+                this.createPortalSurface(portalA);
+                this.createPortalSurface(portalB);
+            }
+
+            createPortalSurface(portal) {
+                // Create render target for this portal's view
+                const renderTarget = new THREE.WebGLRenderTarget(this.portalRenderSize, this.portalRenderSize, {
+                    minFilter: THREE.LinearFilter,
+                    magFilter: THREE.LinearFilter,
+                    format: THREE.RGBAFormat,
+                    stencilBuffer: false,
+                    depthBuffer: true,
+                    generateMipmaps: false
+                });
+
+                portal.renderTarget = renderTarget;
+
+                // Create camera for this portal's perspective
+                const portalCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+                portal.portalCamera = portalCamera;
+
+                // Calculate portal surface position and orientation
+                const bounds = portal.schematic.bounds;
+                const center = {
+                    x: (bounds.min.x + bounds.max.x) / 2,
+                    y: (bounds.min.y + bounds.max.y) / 2,
+                    z: (bounds.min.z + bounds.max.z) / 2
+                };
+
+                const normal = portal.schematic.normal;
+                const width = Math.max(
+                    Math.abs(bounds.max.x - bounds.min.x),
+                    Math.abs(bounds.max.z - bounds.min.z)
+                ) + 1;
+                const height = Math.abs(bounds.max.y - bounds.min.y) + 1;
+
+                // Create portal mesh (plane with render target texture)
+                const geometry = new THREE.PlaneGeometry(width, height);
+                const material = new THREE.MeshBasicMaterial({
+                    map: renderTarget.texture,
+                    side: THREE.DoubleSide,
+                    transparent: false, // Fully opaque for seamless portal view
+                    depthWrite: true,
+                    depthTest: true
+                });
+
+                const portalMesh = new THREE.Mesh(geometry, material);
+
+                // Position portal mesh at center, offset slightly in normal direction
+                portalMesh.position.set(
+                    center.x + normal.x * 0.51,
+                    center.y + normal.y * 0.51,
+                    center.z + normal.z * 0.51
+                );
+
+                // Orient portal mesh using the same coordinate frame as the portal camera
+                // This ensures the surface is oriented correctly based on placement rotation
+                const targetNormal = new THREE.Vector3(normal.x, normal.y, normal.z);
+                const worldUp = new THREE.Vector3(0, 1, 0);
+                const worldRight = new THREE.Vector3(1, 0, 0);
+
+                // Build the same right/up vectors used for the portal coordinate frame
+                const rightBase = worldRight.clone().applyAxisAngle(worldUp, portal.schematic.placementRotation.yaw);
+                const right = rightBase.clone().sub(targetNormal.clone().multiplyScalar(rightBase.dot(targetNormal))).normalize();
+                const up = new THREE.Vector3().crossVectors(right, targetNormal).normalize();
+
+                // Build rotation matrix from these basis vectors
+                // PlaneGeometry default: right=X, up=Y, normal=Z
+                const rotMatrix = new THREE.Matrix4();
+                rotMatrix.makeBasis(right, up, targetNormal);
+
+                const quaternion = new THREE.Quaternion();
+                quaternion.setFromRotationMatrix(rotMatrix);
+                portalMesh.setRotationFromQuaternion(quaternion);
+
+                portal.portalMesh = portalMesh;
+                portal.center = center;
+
+                this.scene.add(portalMesh);
+
+                console.log(`📺 Created portal surface for portal #${portal.id} at [${center.x.toFixed(1)}, ${center.y.toFixed(1)}, ${center.z.toFixed(1)}]`);
+            }
+
+            setObliqueNearPlane(camera, portalPlane) {
+                // Oblique near-plane clipping - prevents artifacts at portal surface
+                const clipPlane = new THREE.Vector4(
+                    portalPlane.normal.x,
+                    portalPlane.normal.y,
+                    portalPlane.normal.z,
+                    -portalPlane.constant
+                );
+
+                const projectionMatrix = camera.projectionMatrix;
+
+                const q = new THREE.Vector4(
+                    (Math.sign(clipPlane.x) + projectionMatrix.elements[8]) / projectionMatrix.elements[0],
+                    (Math.sign(clipPlane.y) + projectionMatrix.elements[9]) / projectionMatrix.elements[5],
+                    -1.0,
+                    (1.0 + projectionMatrix.elements[10]) / projectionMatrix.elements[14]
+                );
+
+                const c = clipPlane.multiplyScalar(2.0 / clipPlane.dot(q));
+
+                projectionMatrix.elements[2] = c.x;
+                projectionMatrix.elements[6] = c.y;
+                projectionMatrix.elements[10] = c.z + 1.0;
+                projectionMatrix.elements[14] = c.w;
+            }
+
+            updatePortalViews(recursionLevel = 0) {
+                if (recursionLevel >= this.portalRecursionDepth) return;
+
+                // Transform player's view rays through each portal
+                for (const portal of this.portals) {
+                    if (portal.linkedTo === null || !portal.renderTarget) continue;
+
+                    const linkedPortal = this.portals.find(p => p.id === portal.linkedTo);
+                    if (!linkedPortal || !linkedPortal.center) continue;
+
+                    // "portal" is the SOURCE (what player looks at)
+                    // "linkedPortal" is the DESTINATION (where view emerges from)
+
+                    const srcCenter = new THREE.Vector3(portal.center.x, portal.center.y, portal.center.z);
+                    const srcNormal = new THREE.Vector3(portal.schematic.normal.x, portal.schematic.normal.y, portal.schematic.normal.z);
+
+                    const dstCenter = new THREE.Vector3(linkedPortal.center.x, linkedPortal.center.y, linkedPortal.center.z);
+                    const dstNormal = new THREE.Vector3(linkedPortal.schematic.normal.x, linkedPortal.schematic.normal.y, linkedPortal.schematic.normal.z);
+
+                    // Build coordinate frames for each portal
+                    // Portal local space: X=right (in portal plane), Y=up (in portal plane), Z=forward (perpendicular to plane)
+
+                    const worldRight = new THREE.Vector3(1, 0, 0);
+                    const worldUp = new THREE.Vector3(0, 1, 0);
+
+                    // For source portal: build frame ALWAYS using the normal (not negated) for consistency
+                    // Right vector = world right rotated by placement yaw, projected onto portal plane
+                    const srcRightTemp = worldRight.clone().applyAxisAngle(worldUp, portal.schematic.placementRotation.yaw);
+                    const srcRight = srcRightTemp.clone().sub(srcNormal.clone().multiplyScalar(srcRightTemp.dot(srcNormal))).normalize();
+
+                    // Up vector = right × normal (perpendicular to both, tangent to surface)
+                    const srcUp = new THREE.Vector3().crossVectors(srcRight, srcNormal).normalize();
+
+                    // Forward for source points INTO surface (negate normal AFTER building right/up)
+                    const srcForward = srcNormal.clone().negate();
+
+                    // For destination portal: same process using ITS normal
+                    const dstRightTemp = worldRight.clone().applyAxisAngle(worldUp, linkedPortal.schematic.placementRotation.yaw);
+                    const dstRight = dstRightTemp.clone().sub(dstNormal.clone().multiplyScalar(dstRightTemp.dot(dstNormal))).normalize();
+
+                    // Up vector = right × normal (perpendicular to both, tangent to surface)
+                    const dstUp = new THREE.Vector3().crossVectors(dstRight, dstNormal).normalize();
+
+                    // Forward for destination points OUT OF surface (same as normal)
+                    const dstForward = dstNormal.clone();
+
+
+                    // Build matrices
+                    // Source portal local space: X=right, Y=up, Z=into surface
+                    const srcMatrix = new THREE.Matrix4();
+                    srcMatrix.makeBasis(srcRight, srcUp, srcForward);
+                    srcMatrix.setPosition(srcCenter);
+
+                    // Destination portal local space: X=right, Y=up, Z=out of surface
+                    const dstMatrix = new THREE.Matrix4();
+                    dstMatrix.makeBasis(dstRight, dstUp, dstForward);
+                    dstMatrix.setPosition(dstCenter);
+
+                    // Transform: World -> Source Local -> [FLIP Z] -> Destination Local -> World
+                    const srcMatrixInv = new THREE.Matrix4().copy(srcMatrix).invert();
+
+                    // 1. Player position in source portal local space
+                    const playerPosLocal = this.camera.position.clone().applyMatrix4(srcMatrixInv);
+
+                    // 2. Negate Z to flip from "into portal" to "out of portal"
+                    playerPosLocal.z = -playerPosLocal.z;
+
+                    // 3. Transform to world space via destination portal
+                    let transformedPos = playerPosLocal.clone().applyMatrix4(dstMatrix);
+
+                    // 4. Ensure camera is on the correct side of the destination portal
+                    const distFromPortal = new THREE.Vector3().subVectors(transformedPos, dstCenter).dot(dstNormal);
+
+                    // If camera would be behind or very close to the portal surface, push it forward
+                    const minDistance = 0.3;
+                    if (distFromPortal < minDistance) {
+                        transformedPos = dstCenter.clone().add(dstNormal.clone().multiplyScalar(minDistance));
+                    }
+
+                    portal.portalCamera.position.copy(transformedPos);
+
+                    // Transform view direction through the portal
+                    const playerForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+                    const playerForwardLocal = playerForward.clone().transformDirection(srcMatrixInv);
+                    // Don't negate Z for directions - coordinate frames handle the flip
+                    const transformedForward = playerForwardLocal.clone().transformDirection(dstMatrix);
+
+                    // Transform camera up vector the same way (no Z negation for directions)
+                    const playerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+                    const playerUpLocal = playerUp.clone().transformDirection(srcMatrixInv);
+                    // playerUpLocal.z = -playerUpLocal.z; // REMOVED - don't negate for directions
+                    const transformedUp = playerUpLocal.clone().transformDirection(dstMatrix);
+
+                    // Set portal camera orientation using transformed vectors
+                    portal.portalCamera.position.copy(transformedPos);
+                    portal.portalCamera.up.copy(transformedUp);
+
+                    const lookTarget = new THREE.Vector3().addVectors(transformedPos, transformedForward.multiplyScalar(10));
+                    portal.portalCamera.lookAt(lookTarget);
+
+                    // Update projection matrix
+                    portal.portalCamera.updateProjectionMatrix();
+
+                    // Apply oblique near-plane clipping
+                    const portalPlane = new THREE.Plane();
+                    portalPlane.setFromNormalAndCoplanarPoint(dstNormal, dstCenter);
+                    this.setObliqueNearPlane(portal.portalCamera, portalPlane);
+
+                    // Temporarily hide this portal's mesh to avoid self-occlusion
+                    const wasVisible = portal.portalMesh.visible;
+                    portal.portalMesh.visible = false;
+
+                    // Render recursively (portals through portals)
+                    if (recursionLevel < this.portalRecursionDepth - 1) {
+                        this.updatePortalViews(recursionLevel + 1);
+                    }
+
+                    // Render the scene from the transformed viewpoint
+                    const currentRenderTarget = this.renderer.getRenderTarget();
+                    this.renderer.setRenderTarget(portal.renderTarget);
+                    this.renderer.clear();
+                    this.renderer.render(this.scene, portal.portalCamera);
+                    this.renderer.setRenderTarget(currentRenderTarget);
+
+                    // Restore portal mesh visibility
+                    portal.portalMesh.visible = wasVisible;
+                }
+            }
+
+            onPortalBlockRemoved(worldX, worldY, worldZ) {
+                // Find which portal this block belonged to
+                const portalIndex = this.portals.findIndex(p =>
+                    p.blocks.some(b => b.x === worldX && b.y === worldY && b.z === worldZ)
+                );
+
+                if (portalIndex !== -1) {
+                    const portal = this.portals[portalIndex];
+
+                    // Remove the block
+                    portal.blocks = portal.blocks.filter(b =>
+                        !(b.x === worldX && b.y === worldY && b.z === worldZ)
+                    );
+
+                    if (portal.blocks.length === 0) {
+                        // Portal fully destroyed - clean up rendering resources
+                        if (portal.portalMesh) {
+                            this.scene.remove(portal.portalMesh);
+                            portal.portalMesh.geometry.dispose();
+                            portal.portalMesh.material.dispose();
+                        }
+                        if (portal.renderTarget) {
+                            portal.renderTarget.dispose();
+                        }
+
+                        if (portal.linkedTo !== null) {
+                            // Unlink and clean up the other portal's rendering
+                            const linkedPortal = this.portals.find(p => p.id === portal.linkedTo);
+                            if (linkedPortal) {
+                                linkedPortal.linkedTo = null;
+                                linkedPortal.schematic.linkedTo = null;
+
+                                // Remove linked portal's surface
+                                if (linkedPortal.portalMesh) {
+                                    this.scene.remove(linkedPortal.portalMesh);
+                                    linkedPortal.portalMesh.geometry.dispose();
+                                    linkedPortal.portalMesh.material.dispose();
+                                    linkedPortal.portalMesh = null;
+                                }
+                                if (linkedPortal.renderTarget) {
+                                    linkedPortal.renderTarget.dispose();
+                                    linkedPortal.renderTarget = null;
+                                }
+
+                                console.log(`🔓 Unlinked portal #${linkedPortal.id}`);
+                            }
+                        }
+                        this.portals.splice(portalIndex, 1);
+                        console.log(`🗑️ Destroyed portal #${portal.id}`);
+                    } else {
+                        // Update schematic
+                        portal.schematic = this.createPortalSchematic(portal.blocks);
+                        console.log(`⚠️ Modified portal #${portal.id} (${portal.blocks.length} blocks)`);
+                    }
+                }
+            }
+
+
+            update(deltaTime) {
+                // Camera movement
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+                forward.y = 0;
+                forward.normalize();
+                right.y = 0;
+                right.normalize();
+
+                if (this.keys['w']) this.camera.position.addScaledVector(forward, this.moveSpeed);
+                if (this.keys['s']) this.camera.position.addScaledVector(forward, -this.moveSpeed);
+                if (this.keys['a']) this.camera.position.addScaledVector(right, -this.moveSpeed);
+                if (this.keys['d']) this.camera.position.addScaledVector(right, this.moveSpeed);
+                if (this.keys[' ']) this.camera.position.y += this.moveSpeed;
+                if (this.keys['shift']) this.camera.position.y -= this.moveSpeed;
+
+                // Check for portal teleportation
+                this.checkPortalTeleportation();
+            }
+
+            checkPortalTeleportation() {
+                // Check if player has crossed through any portal
+                for (const portal of this.portals) {
+                    if (portal.linkedTo === null || !portal.center) continue;
+
+                    const linkedPortal = this.portals.find(p => p.id === portal.linkedTo);
+                    if (!linkedPortal || !linkedPortal.center) continue;
+
+                    // Check if player is close to portal surface
+                    const portalCenter = new THREE.Vector3(portal.center.x, portal.center.y, portal.center.z);
+                    const portalNormal = new THREE.Vector3(portal.schematic.normal.x, portal.schematic.normal.y, portal.schematic.normal.z);
+
+                    // Calculate distance from player to portal plane
+                    const toPlayer = new THREE.Vector3().subVectors(this.camera.position, portalCenter);
+                    const distanceToPlane = toPlayer.dot(portalNormal);
+
+                    // Check if player crossed the portal plane (from front to back)
+                    if (!portal.lastPlayerSide) {
+                        portal.lastPlayerSide = Math.sign(distanceToPlane);
+                    }
+
+                    const currentSide = Math.sign(distanceToPlane);
+
+                    // Player crossed through the portal!
+                    if (portal.lastPlayerSide > 0 && currentSide <= 0 && Math.abs(distanceToPlane) < 1.5) {
+                        // Check if player is within portal bounds
+                        const bounds = portal.schematic.bounds;
+                        const playerPos = this.camera.position;
+
+                        // Project player position onto portal plane to check bounds
+                        const inBounds = this.isPlayerInPortalBounds(playerPos, portal);
+
+                        if (inBounds) {
+                            this.teleportThroughPortal(portal, linkedPortal);
+                            portal.lastPlayerSide = currentSide;
+                            return; // Only teleport once per frame
+                        }
+                    }
+
+                    portal.lastPlayerSide = currentSide;
+                }
+            }
+
+            isPlayerInPortalBounds(playerPos, portal) {
+                const bounds = portal.schematic.bounds;
+                const normal = portal.schematic.normal;
+
+                // Check bounds based on portal orientation
+                if (normal.x !== 0) {
+                    // Portal is on YZ plane
+                    return playerPos.y >= bounds.min.y - 0.5 && playerPos.y <= bounds.max.y + 1.5 &&
+                           playerPos.z >= bounds.min.z - 0.5 && playerPos.z <= bounds.max.z + 1.5;
+                } else if (normal.y !== 0) {
+                    // Portal is on XZ plane
+                    return playerPos.x >= bounds.min.x - 0.5 && playerPos.x <= bounds.max.x + 1.5 &&
+                           playerPos.z >= bounds.min.z - 0.5 && playerPos.z <= bounds.max.z + 1.5;
+                } else {
+                    // Portal is on XY plane
+                    return playerPos.x >= bounds.min.x - 0.5 && playerPos.x <= bounds.max.x + 1.5 &&
+                           playerPos.y >= bounds.min.y - 0.5 && playerPos.y <= bounds.max.y + 1.5;
+                }
+            }
+
+            teleportThroughPortal(fromPortal, toPortal) {
+                const fromCenter = new THREE.Vector3(fromPortal.center.x, fromPortal.center.y, fromPortal.center.z);
+                const toCenter = new THREE.Vector3(toPortal.center.x, toPortal.center.y, toPortal.center.z);
+                const fromNormal = new THREE.Vector3(fromPortal.schematic.normal.x, fromPortal.schematic.normal.y, fromPortal.schematic.normal.z);
+                const toNormal = new THREE.Vector3(toPortal.schematic.normal.x, toPortal.schematic.normal.y, toPortal.schematic.normal.z);
+
+                // Calculate player position relative to entry portal
+                const relativePos = new THREE.Vector3().subVectors(this.camera.position, fromCenter);
+
+                // Calculate rotation between portal normals
+                const fromAngle = Math.atan2(fromNormal.x, fromNormal.z);
+                const toAngle = Math.atan2(toNormal.x, toNormal.z);
+                const rotationAngle = toAngle - fromAngle + Math.PI; // +PI to flip 180 degrees
+
+                // Rotate relative position
+                const rotatedPos = new THREE.Vector3(
+                    relativePos.x * Math.cos(rotationAngle) - relativePos.z * Math.sin(rotationAngle),
+                    relativePos.y,
+                    relativePos.x * Math.sin(rotationAngle) + relativePos.z * Math.cos(rotationAngle)
+                );
+
+                // Flip position (enter from front, exit from front)
+                rotatedPos.multiplyScalar(-1);
+
+                // Calculate new position at exit portal
+                const newPosition = new THREE.Vector3().addVectors(toCenter, rotatedPos);
+                this.camera.position.copy(newPosition);
+
+                // Rotate camera orientation
+                this.camera.rotation.y += rotationAngle;
+
+                console.log(`⚡ Teleported through portal #${fromPortal.id} → #${toPortal.id}`);
+
+                // Reset tracking for destination portal so we don't immediately teleport back
+                toPortal.lastPlayerSide = -1;
+            }
+
+            updateUI() {
+                const typeName = Object.values(VOXEL_TYPES).find(t => t.id === this.currentBlockType)?.name || 'Unknown';
+                document.getElementById('block-type').textContent = typeName;
+                document.getElementById('position').textContent =
+                    `${Math.floor(this.camera.position.x)}, ${Math.floor(this.camera.position.y)}, ${Math.floor(this.camera.position.z)}`;
+
+                // Update portal count
+                const linkedPortals = this.portals.filter(p => p.linkedTo !== null).length;
+                const unlinkedPortals = this.portals.filter(p => p.linkedTo === null).length;
+                document.getElementById('portal-count').textContent =
+                    `${linkedPortals/2} linked, ${unlinkedPortals} unlinked`;
+
+                // Show/hide link prompt
+                const promptEl = document.getElementById('link-prompt');
+                if (this.pendingLinkPrompt) {
+                    promptEl.style.display = 'block';
+                } else {
+                    promptEl.style.display = 'none';
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+
+                const currentTime = performance.now();
+                const deltaTime = (currentTime - this.lastTime) * 0.001;
+                this.lastTime = currentTime;
+
+                this.frameCount++;
+                if (this.frameCount % 60 === 0) {
+                    const fps = Math.round(1 / deltaTime);
+                    document.getElementById('fps').textContent = fps;
+                }
+
+                this.update(deltaTime);
+                this.updateUI();
+
+                // Update portal views before main render
+                this.updatePortalViews();
+
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const scene = new PortalTestScene();
+            window.portalTest = scene;
+            console.log('🎮 Access scene via window.portalTest');
+        });
+    </script>
+</body>
+</html>

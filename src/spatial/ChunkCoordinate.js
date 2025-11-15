@@ -1,10 +1,15 @@
 export class ChunkCoordinate {
     static toKey(cx, cy, cz) {
-        return `${cx},${cy},${cz}`;
+        const x = (cx + 512) & 0x3FF;
+        const y = (cy + 512) & 0x3FF;
+        const z = (cz + 512) & 0x3FF;
+        return (x << 20) | (y << 10) | z;
     }
 
     static fromKey(key) {
-        const [cx, cy, cz] = key.split(',').map(Number);
+        const cx = ((key >> 20) & 0x3FF) - 512;
+        const cy = ((key >> 10) & 0x3FF) - 512;
+        const cz = (key & 0x3FF) - 512;
         return { cx, cy, cz };
     }
 

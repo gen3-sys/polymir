@@ -14,7 +14,11 @@ import { OrbitalSystem } from '../systems/OrbitalSystem.js';
 import { CelestialBody } from '../world/entities/CelestialBody.js';
 import { WorldCache } from '../storage/WorldCache.js';
 import { FPSControls } from '../controls/FPSControls.js';
+import { CameraTransition } from '../controls/CameraTransition.js';
 import { MVoxLoader } from '../data/mvox/MVoxLoader.js';
+import { GeometryBufferPool } from '../memory/GeometryBufferPool.js';
+import { BiomeConfiguration } from '../config/BiomeConfiguration.js';
+import globalBiomeEventBus, { BIOME_EVENTS } from '../systems/BiomeConfigEventBus.js';
 
 export class Game {
     constructor(canvas) {
@@ -23,20 +27,22 @@ export class Game {
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 
+        this.biomeEventUnsubscribe = null;
+
         this.planetRadius = 150;
         this.starRadius = 80;
         this.chunkSize = 16;
         this.chunkTextureSize = 64;
 
         this.loadedMeshes = new Map();
-        this.nestedStructureMeshes = new Map(); 
+        this.chunkBuffers = new Map();
+        this.nestedStructureMeshes = new Map();
         this.materials = {};
         this.isLoading = true;
-        this.isTransitioning = false;
-        this.transitionProgress = 0;
-        this.transitionDuration = 3.0;
         this.surfaceChunksToLoad = [];
         this.loadedSurfaceChunks = 0;
+
+        this.geometryBufferPool = new GeometryBufferPool(200);
 
         this.cachedPlanetPos = new THREE.Vector3();
         this.cachedStarPos = new THREE.Vector3();
@@ -52,6 +58,19 @@ export class Game {
         this.lastTime = performance.now();
         this.lastRenderTime = performance.now();
         this.frameCount = 0;
+
+        this.validationMetrics = {
+            startupErrors: 0,
+            fpsDrops: 0,
+            memorySpikes: 0,
+            lastFPS: 0,
+            lastMemory: 0,
+            baselineTriangles: 0,
+            currentTriangles: 0,
+            greedyReduction: 0,
+            chunkKeyGenerations: 0,
+            chunkKeyLookups: 0
+        };
     }
 
     setupRenderer() {
@@ -70,7 +89,7 @@ export class Game {
         const star = new CelestialBody({
             type: 'star',
             radius: this.starRadius,
-            position: { x: -1500, y: 0, z: 0 },
+            position: { x: 0, y: 0, z: 0 },
             rotationSpeed: 0
         });
 
@@ -81,7 +100,7 @@ export class Game {
             name: 'Terra',
             radius: this.planetRadius,
             position: { x: 0, y: 0, z: 0 },
-            orbitRadius: 0,  // No orbit - planet is stationary for FPS mode
+            orbitRadius: 0,  
             orbitSpeed: 0,
             rotationSpeed: 0.05,
             rotationTilt: 0.4,
@@ -97,6 +116,7 @@ export class Game {
 
     setupControls() {
         this.fpsControls = new FPSControls(this.camera, this.canvas);
+        this.cameraTransition = new CameraTransition(this.camera, this.fpsControls);
         window.addEventListener('resize', () => this.handleResize());
     }
 
@@ -134,8 +154,12 @@ export class Game {
     }
 
     async loadOrGeneratePlanet() {
-        const planetGenerator = new SphereGenerator(this.planetRadius);
+        this.biomeConfig = BiomeConfiguration.loadFromLocalStorage('universe_biome_config') || new BiomeConfiguration();
+
+        const planetGenerator = new SphereGenerator(this.planetRadius, 1, this.biomeConfig);
         this.planetGenerator = planetGenerator;
+
+        this.setupBiomeEventListeners();
 
         const startCameraPos = {
             x: this.camera.position.x,
@@ -143,7 +167,6 @@ export class Game {
             z: this.camera.position.z
         };
 
-        // Get all surface chunks and sort by distance from camera
         const allSurfaceChunks = planetGenerator.getSurfaceChunks(this.chunkSize, startCameraPos);
         const sortedChunks = allSurfaceChunks
             .map(coord => {
@@ -162,12 +185,10 @@ export class Game {
             })
             .sort((a, b) => a.dist - b.dist);
 
-        // Take only the 9 closest chunks for initial load
         this.surfaceChunksToLoad = sortedChunks.slice(0, 9);
 
         this.planetChunks = new Map();
 
-        // Pre-generate EXACTLY these 9 chunks
         for (const coord of this.surfaceChunksToLoad) {
             const { cx, cy, cz } = coord;
             const key = ChunkCoordinate.toKey(cx, cy, cz);
@@ -262,21 +283,8 @@ export class Game {
 
     onLoadingComplete() {
         this.isLoading = false;
-        this.isTransitioning = true;
-        this.transitionProgress = 0;
-        this.startTransitionCamera = {
-            position: {
-                x: this.loadingAnimation.camera.position.x,
-                y: this.loadingAnimation.camera.position.y,
-                z: this.loadingAnimation.camera.position.z
-            },
-            angle: {
-                theta: this.loadingAnimation.cameraAngle.theta,
-                phi: this.loadingAnimation.cameraAngle.phi
-            },
-            distance: this.loadingAnimation.cameraDistance
-        };
 
+        this.benchmarkChunkKeys();
         this.updateCachedPositions();
 
         if (this.preloadedSurfaceMeshes) {
@@ -289,6 +297,11 @@ export class Game {
 
         this.updateScene();
 
+        this.camera.position.copy(this.loadingAnimation.camera.position);
+        this.camera.rotation.copy(this.loadingAnimation.camera.rotation);
+
+        const planetPos = this.mainPlanet.getWorldPosition();
+        this.cameraTransition.transitionToPlanet(planetPos, this.planetRadius, 3.0);
     }
 
     loadStarVoxels() {
@@ -307,7 +320,6 @@ export class Game {
 
         const chunkData = this.planetChunks.get(key);
         if (!chunkData) {
-            // Chunk not pre-generated (expected for on-demand chunks)
             this.loadedSurfaceChunks++;
             return;
         }
@@ -315,11 +327,16 @@ export class Game {
         const chunk = new Chunk(cx, cy, cz, this.chunkSize);
         chunk.voxels = chunkData.voxels;
 
-        const geometryData = chunk.buildMesh((cx, cy, cz, lx, ly, lz, cs) =>
-            this.neighborLookup(cx, cy, cz, lx, ly, lz, cs)
+        const geometryData = chunk.buildMeshPooled(
+            (cx, cy, cz, lx, ly, lz, cs) => this.neighborLookup(cx, cy, cz, lx, ly, lz, cs),
+            this.geometryBufferPool
         );
 
         if (geometryData) {
+            if (geometryData.poolBuffer) {
+                this.geometryBufferPool.assignToChunk(key, geometryData.poolBuffer);
+                this.chunkBuffers.set(key, geometryData.poolBuffer);
+            }
             const mesh = MeshFactory.createChunkMesh(geometryData, this.materials.voxel);
 
             if (!this.preloadedSurfaceMeshes) {
@@ -330,8 +347,6 @@ export class Game {
         }
 
         this.loadedSurfaceChunks++;
-        if (this.loadedSurfaceChunks % 100 === 0 || this.loadedSurfaceChunks === this.surfaceChunksToLoad.length) {
-        }
     }
 
     neighborLookup(chunkX, chunkY, chunkZ, localX, localY, localZ, chunkSize) {
@@ -395,27 +410,46 @@ export class Game {
         const loadRadius = this.lodManager.switchDistance;
         this.chunkLoader.updateQueue(cameraToPlanet, loadRadius);
 
-        
         const batch = this.chunkLoader.loadNextBatch();
 
         for (const { cx, cy, cz, key, chunkData } of batch) {
             if (this.loadedMeshes.has(key)) continue;
 
-            
+            const neighborCoords = [
+                { cx: cx - 1, cy, cz }, { cx: cx + 1, cy, cz },
+                { cx, cy: cy - 1, cz }, { cx, cy: cy + 1, cz },
+                { cx, cy, cz: cz - 1 }, { cx, cy, cz: cz + 1 }
+            ];
+
+            for (const coord of neighborCoords) {
+                const neighborKey = ChunkCoordinate.toKey(coord.cx, coord.cy, coord.cz);
+                if (!this.planetChunks.has(neighborKey) && this.planetGenerator) {
+                    const neighborData = this.planetGenerator.generateChunk(
+                        coord.cx, coord.cy, coord.cz, this.chunkSize
+                    );
+                    if (neighborData) {
+                        this.planetChunks.set(neighborKey, neighborData);
+                    }
+                }
+            }
+
             this.worldCache.loadMesh(key, 'terra_main').then(geometryData => {
                 if (this.loadedMeshes.has(key)) return; 
 
                 if (!geometryData) {
-                    
                     const chunk = new Chunk(cx, cy, cz, this.chunkSize);
                     chunk.voxels = chunkData.voxels;
 
-                    geometryData = chunk.buildMesh((cx, cy, cz, lx, ly, lz, cs) =>
-                        this.neighborLookup(cx, cy, cz, lx, ly, lz, cs)
+                    geometryData = chunk.buildMeshPooled(
+                        (cx, cy, cz, lx, ly, lz, cs) => this.neighborLookup(cx, cy, cz, lx, ly, lz, cs),
+                        this.geometryBufferPool
                     );
 
-                    
                     if (geometryData) {
+                        if (geometryData.poolBuffer) {
+                            this.geometryBufferPool.assignToChunk(key, geometryData.poolBuffer);
+                            this.chunkBuffers.set(key, geometryData.poolBuffer);
+                        }
                         this.worldCache.saveMesh(key, geometryData, 'terra_main').catch(() => {});
                     }
                 }
@@ -427,15 +461,19 @@ export class Game {
                     this.chunkTextureManager.update(cx, cy, cz, true);
                 }
             }).catch(() => {
-                
                 const chunk = new Chunk(cx, cy, cz, this.chunkSize);
                 chunk.voxels = chunkData.voxels;
 
-                const geometryData = chunk.buildMesh((cx, cy, cz, lx, ly, lz, cs) =>
-                    this.neighborLookup(cx, cy, cz, lx, ly, lz, cs)
+                const geometryData = chunk.buildMeshPooled(
+                    (cx, cy, cz, lx, ly, lz, cs) => this.neighborLookup(cx, cy, cz, lx, ly, lz, cs),
+                    this.geometryBufferPool
                 );
 
                 if (geometryData) {
+                    if (geometryData.poolBuffer) {
+                        this.geometryBufferPool.assignToChunk(key, geometryData.poolBuffer);
+                        this.chunkBuffers.set(key, geometryData.poolBuffer);
+                    }
                     const mesh = MeshFactory.createChunkMesh(geometryData, this.materials.voxel);
                     this.planetContainer.add(mesh);
                     this.loadedMeshes.set(key, mesh);
@@ -444,7 +482,6 @@ export class Game {
             });
         }
 
-        
         const unloaded = this.chunkLoader.unloadDistantChunks(
             cameraToPlanet,
             this.lodManager.getUnloadDistance()
@@ -456,6 +493,12 @@ export class Game {
                 this.planetContainer.remove(mesh);
                 MeshFactory.disposeMesh(mesh);
                 this.loadedMeshes.delete(key);
+
+                const buffer = this.chunkBuffers.get(key);
+                if (buffer) {
+                    this.geometryBufferPool.release(key, buffer);
+                    this.chunkBuffers.delete(key);
+                }
 
                 const { cx, cy, cz } = ChunkCoordinate.fromKey(key);
                 this.chunkTextureManager.update(cx, cy, cz, false);
@@ -479,6 +522,11 @@ export class Game {
             this.frameCount = 0;
             this.lastTime = currentTime;
 
+            if (this.validationMetrics.lastFPS > 0 && fps < this.validationMetrics.lastFPS * 0.9) {
+                this.validationMetrics.fpsDrops++;
+            }
+            this.validationMetrics.lastFPS = fps;
+
             document.getElementById('fps').textContent = fps;
 
             if (performance.memory) {
@@ -486,8 +534,80 @@ export class Game {
                 const glInfo = this.renderer.info.memory;
                 const gpuInfo = ` (Geo: ${glInfo.geometries}, Tex: ${glInfo.textures})`;
                 document.getElementById('memory').textContent = memoryMB + gpuInfo;
+
+                if (this.validationMetrics.lastMemory > 0 && memoryMB > this.validationMetrics.lastMemory * 1.3) {
+                    this.validationMetrics.memorySpikes++;
+                }
+                this.validationMetrics.lastMemory = memoryMB;
+            }
+
+            this.validationMetrics.currentTriangles = this.renderer.info.render.triangles;
+
+            const poolStats = this.geometryBufferPool.getStats();
+            if (document.getElementById('pool-reuse')) {
+                document.getElementById('pool-reuse').textContent = poolStats.reuseRate;
+            }
+            if (document.getElementById('pool-buffers')) {
+                document.getElementById('pool-buffers').textContent =
+                    `${poolStats.inUseBuffers}/${poolStats.availableBuffers + poolStats.inUseBuffers}`;
             }
         }
+    }
+
+    getValidationStatus() {
+        const warnings = this.validationMetrics.fpsDrops + this.validationMetrics.memorySpikes;
+        return {
+            healthy: warnings === 0,
+            warnings,
+            details: this.validationMetrics
+        };
+    }
+
+    benchmarkChunkKeys() {
+        const iterations = 100000;
+        const testCoords = [];
+        for (let i = 0; i < 1000; i++) {
+            testCoords.push({
+                cx: Math.floor(Math.random() * 1000) - 500,
+                cy: Math.floor(Math.random() * 1000) - 500,
+                cz: Math.floor(Math.random() * 1000) - 500
+            });
+        }
+
+        const stringStart = performance.now();
+        for (let i = 0; i < iterations; i++) {
+            const coord = testCoords[i % testCoords.length];
+            const key = `${coord.cx},${coord.cy},${coord.cz}`;
+        }
+        const stringTime = performance.now() - stringStart;
+
+        const numericStart = performance.now();
+        for (let i = 0; i < iterations; i++) {
+            const coord = testCoords[i % testCoords.length];
+            const key = ChunkCoordinate.toKey(coord.cx, coord.cy, coord.cz);
+        }
+        const numericTime = performance.now() - numericStart;
+
+        const testMap = new Map();
+        for (let i = 0; i < testCoords.length; i++) {
+            const coord = testCoords[i];
+            testMap.set(ChunkCoordinate.toKey(coord.cx, coord.cy, coord.cz), i);
+        }
+
+        const lookupStart = performance.now();
+        for (let i = 0; i < iterations; i++) {
+            const coord = testCoords[i % testCoords.length];
+            const key = ChunkCoordinate.toKey(coord.cx, coord.cy, coord.cz);
+            testMap.get(key);
+        }
+        const lookupTime = performance.now() - lookupStart;
+
+        console.log('=== Chunk Key Performance ===');
+        console.log(`String generation: ${stringTime.toFixed(2)}ms`);
+        console.log(`Numeric generation: ${numericTime.toFixed(2)}ms`);
+        console.log(`Speedup: ${(stringTime / numericTime).toFixed(2)}x faster`);
+        console.log(`Map lookup (numeric): ${lookupTime.toFixed(2)}ms`);
+        console.log(`Avg lookup: ${((lookupTime / iterations) * 1000000).toFixed(3)}ns`);
     }
 
     updateCachedPositions() {
@@ -550,18 +670,14 @@ export class Game {
             }
 
             this.updateScene();
-            this.fpsControls.update(deltaTime);
-            this.updateFPS();
 
-            if (this.isTransitioning) {
-                this.transitionProgress += deltaTime / this.transitionDuration;
-
-                if (this.transitionProgress >= 1.0) {
-                    this.transitionProgress = 1.0;
-                    this.isTransitioning = false;
-                }
+            if (this.cameraTransition.isTransitioning) {
+                this.cameraTransition.update(deltaTime);
+            } else {
+                this.fpsControls.update(deltaTime);
             }
 
+            this.updateFPS();
             this.updateChunkLoading();
 
             this.renderer.render(this.scene, this.camera);
@@ -680,6 +796,41 @@ export class Game {
 
         if (this.loadingAnimation) {
             this.loadingAnimation.handleResize(window.innerWidth, window.innerHeight);
+        }
+    }
+
+    setupBiomeEventListeners() {
+        if (this.biomeEventUnsubscribe) {
+            this.biomeEventUnsubscribe();
+        }
+
+        this.biomeEventUnsubscribe = globalBiomeEventBus.on(BIOME_EVENTS.DISTRIBUTION_CHANGED, (data) => {
+            console.log('Biome distribution changed:', data);
+            if (this.planetGenerator && this.biomeConfig) {
+                this.planetGenerator.biomeConfig = this.biomeConfig;
+            }
+        });
+
+        globalBiomeEventBus.on(BIOME_EVENTS.CONFIG_LOADED, (data) => {
+            console.log('Biome configuration loaded:', data);
+            this.biomeConfig = BiomeConfiguration.loadFromLocalStorage('universe_biome_config');
+            if (this.planetGenerator) {
+                this.planetGenerator.biomeConfig = this.biomeConfig;
+            }
+        });
+    }
+
+    updateBiomeConfiguration(newConfig) {
+        this.biomeConfig = newConfig;
+        if (this.planetGenerator) {
+            this.planetGenerator.biomeConfig = newConfig;
+        }
+        console.log('Game biome configuration updated');
+    }
+
+    dispose() {
+        if (this.biomeEventUnsubscribe) {
+            this.biomeEventUnsubscribe();
         }
     }
 }

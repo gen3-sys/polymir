@@ -24,11 +24,20 @@ export class MVoxFile {
             compression: 'none',
             nbt_schema: `polymir_${this.type}_v1`,
             scale_label: this.metadata.scale_label || 'block',
+
+            planet: this.metadata.planet !== undefined ? this.metadata.planet : (this.type === 'planet'),
+
+            category: this.metadata.category || this.metadata.buildType || 'uncategorized',
+            tags: this.metadata.tags || [],
+
             metadata: {
                 author: this.metadata.author || 'unknown',
                 name: this.metadata.name || 'Untitled',
                 bounds: this.metadata.bounds || [16, 16, 16],
                 created: this.metadata.created || Date.now(),
+                description: this.metadata.description || '',
+                biomes: this.metadata.biomes || [],
+                spawnFrequency: this.metadata.spawnFrequency || 0.05,
                 ...this.metadata
             }
         };
@@ -80,7 +89,13 @@ export class MVoxFile {
         const file = new MVoxFile(
             header.type,
             voxels,
-            { ...header.metadata, ...metadata }
+            {
+                ...header.metadata,
+                ...metadata,
+                planet: header.planet,
+                category: header.category,
+                tags: header.tags || []
+            }
         );
 
         if (header.references) {

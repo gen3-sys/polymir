@@ -1,6 +1,7 @@
 export class CelestialBody {
     constructor(config) {
         this.type = config.type;
+        this.bodyType = config.bodyType || this.inferBodyType(config.type);
         this.name = config.name || (config.type === 'star' ? 'Sol' : 'Planet');
         this.claimOwner = config.claimOwner || null;
         this.radius = config.radius;
@@ -13,6 +14,9 @@ export class CelestialBody {
         this.orbitWobbleSpeed = config.orbitWobbleSpeed || 0;
         this.orbitEccentricity = config.orbitEccentricity || 0;
         this.orbitPhase = config.orbitPhase || 0;
+
+        this.orbitCenter = config.orbitCenter || { x: 0, y: 0, z: 0 };
+        this.timeScale = config.timeScale || 1.0;
 
         this.rotationSpeed = config.rotationSpeed || 0;
         this.rotationTilt = config.rotationTilt || 0;
@@ -104,5 +108,27 @@ export class CelestialBody {
             return 0xffffee;
         }
         return 0xffffff;
+    }
+
+    inferBodyType(type) {
+        const typeMap = {
+            'star': 'star',
+            'planet': 'planet',
+            'moon': 'moon',
+            'system': 'system',
+            'supercluster': 'supercluster'
+        };
+        return typeMap[type] || 'planet';
+    }
+
+    getHierarchyLevel() {
+        const levels = {
+            'supercluster': 0,
+            'system': 1,
+            'star': 2,
+            'planet': 3,
+            'moon': 4
+        };
+        return levels[this.bodyType] || 3;
     }
 }

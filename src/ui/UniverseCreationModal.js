@@ -6,6 +6,8 @@ import { BiomeSettingsModal } from './BiomeSettingsModal.js';
 import { SystemConfigTabSimplified } from './SystemConfigTabSimplified.js';
 import { SchematicLibraryManager } from './SchematicLibraryManager.js';
 import { TerrainPainterModal } from './TerrainPainterModal.js';
+import { GalaxyNaming } from '../systems/GalaxyNaming.js';
+import { BiomeConfiguration } from '../config/BiomeConfiguration.js';
 
 class SystemGeneratorMenuEnhanced {
     constructor(engine) {
@@ -27,6 +29,12 @@ class SystemGeneratorMenuEnhanced {
         this.superclusterViewActive = false;
         this.superclusterAdvancedOpen = false;
 
+        this.currentGalaxy = GalaxyNaming.createGalaxy(0, 0, 0, Date.now(), {
+            owner: 'local',
+            public: false,
+            type: 'spiral'
+        });
+
         this.superclusterConfig = {
             name: 'Laniakea',
             proceduralEnabled: true,
@@ -45,6 +53,8 @@ class SystemGeneratorMenuEnhanced {
                 structureDensity: 0.5
             }
         };
+
+        console.log('Default galaxy created:', this.currentGalaxy);
 
         window.systemGenerator = this;
         window.systemMenu = this;
@@ -77,20 +87,20 @@ class SystemGeneratorMenuEnhanced {
         };
         
         
+        this.biomeConfig = BiomeConfiguration.loadFromLocalStorage('universe_biome_config') || new BiomeConfiguration();
+
+        this.biomeConfig.onConfigChanged = (config) => {
+            this.saveBiomeConfiguration();
+        };
+
         this.globalDefaults = {
             temperature: 'temperate',
             gravity: 1.0,
-            biomes: {
-                desert: 15,
-                forest: 25,
-                ocean: 30,
-                grassland: 20,
-                mountains: 10
-            },
+            biomes: this.biomeConfig.getBiomeDistribution(),
             structureFrequency: 'common',
             structureTags: ['alien_ruins', 'settlement']
         };
-        
+
         this.loadSavedWorlds();
         
         
@@ -162,6 +172,7 @@ class SystemGeneratorMenuEnhanced {
 
         if (!this.menuElement) {
             this.createMenu();
+            this.initializeDefaultSystem();
         }
 
         this.menuElement.style.display = 'block';
@@ -171,6 +182,14 @@ class SystemGeneratorMenuEnhanced {
         }
 
         setTimeout(() => this.attachPreviewRenderer(), 100);
+    }
+
+    initializeDefaultSystem() {
+        if (this.clusterSystems.length === 0 && this.systemConfigTab.planets.length > 0) {
+            console.log('Initializing default system with starter planets...');
+            this.addSystemToCluster();
+            console.log(`Default system "${this.clusterSystems[0].name}" added to galaxy "${this.currentGalaxy.name}"`);
+        }
     }
 
     attachPreviewRenderer() {
@@ -194,8 +213,10 @@ class SystemGeneratorMenuEnhanced {
                 previewCanvas.style.display = 'none';
                 this.engine.renderer.domElement.style.width = '100%';
                 this.engine.renderer.domElement.style.height = '100%';
+                this.engine.renderer.domElement.style.display = 'block';
                 previewContainer.appendChild(this.engine.renderer.domElement);
                 console.log('[Preview] Renderer attached to preview container');
+                console.log('[Preview] Renderer canvas display:', this.engine.renderer.domElement.style.display);
                 console.log('[Preview] Scene children count:', this.engine.scene.children.length);
                 console.log('[Preview] Camera position:', this.engine.camera.position);
                 console.log('[Preview] Renderer size:', this.engine.renderer.getSize(new THREE.Vector2()));
@@ -315,150 +336,269 @@ class SystemGeneratorMenuEnhanced {
             if (btn.dataset.mode === mode) {
                 btn.classList.add('active');
                 const colors = {
+                    supercluster: { bg: 'rgba(0, 255, 255, 0.3)', border: '#00FFFF' },
                     galaxy: { bg: 'rgba(100, 100, 255, 0.3)', border: '#6B8AFF' },
                     system: { bg: 'rgba(254, 0, 137, 0.3)', border: '#FE0089' },
                     planet: { bg: 'rgba(0, 255, 100, 0.3)', border: '#00FF66' }
                 };
-                btn.style.background = colors[mode].bg;
-                btn.style.borderColor = colors[mode].border;
+                if (colors[mode]) {
+                    btn.style.background = colors[mode].bg;
+                    btn.style.borderColor = colors[mode].border;
+                }
             } else {
                 const baseColors = {
+                    supercluster: { bg: 'rgba(0, 255, 255, 0.1)', border: '#00FFFF' },
                     galaxy: { bg: 'rgba(100, 100, 255, 0.1)', border: '#6B8AFF' },
                     system: { bg: 'rgba(254, 0, 137, 0.1)', border: '#FE0089' },
                     planet: { bg: 'rgba(0, 255, 100, 0.1)', border: '#00FF66' }
                 };
                 const btnMode = btn.dataset.mode;
-                btn.style.background = baseColors[btnMode].bg;
-                btn.style.borderColor = baseColors[btnMode].border;
+                if (btnMode && baseColors[btnMode]) {
+                    btn.style.background = baseColors[btnMode].bg;
+                    btn.style.borderColor = baseColors[btnMode].border;
+                }
             }
         });
 
         this.updatePreviewForMode();
     }
 
-    toggleSuperclusterView() {
-        this.superclusterViewActive = !this.superclusterViewActive;
+    showGalaxyView() {
+        this.superclusterViewActive = false;
+        const planetCardsContainer = document.getElementById('planet-cards-container');
+        const superclusterContainer = document.getElementById('supercluster-config-container');
+
+        planetCardsContainer.style.display = 'none';
+        superclusterContainer.style.display = 'block';
+
+        this.renderGalaxyCards();
+    }
+
+    renderGalaxyCards() {
+        const superclusterContent = document.getElementById('supercluster-content');
+        if (!superclusterContent) return;
+
+        const systemCards = this.clusterSystems.map(sys => `
+            <div class="planet-tile" style="
+                border-color: #00FFFF;
+                width: 180px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <div
+                        style="color: #FFD700; font-size: 11px; font-weight: bold; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text;"
+                        ondblclick="event.stopPropagation(); window.systemGenerator.editSystemName('${sys.id}', this)"
+                        title="Double-click to rename"
+                    >
+                        ${sys.name}
+                    </div>
+                    <button onclick="event.stopPropagation(); window.systemGenerator.removeClusterSystem('${sys.id}')" style="
+                        background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+                        color: white;
+                        border: none;
+                        border-radius: 3px;
+                        padding: 2px 4px;
+                        cursor: pointer;
+                        font-size: 10px;
+                    ">X</button>
+                </div>
+
+                <div style="color: #888; font-size: 8px; margin-bottom: 4px;">
+                    ${new Date(sys.timestamp).toLocaleTimeString()}
+                </div>
+
+                <div style="display: grid; grid-template-columns: 50px 1fr; gap: 4px; align-items: center; margin-bottom: 2px;">
+                    <label style="color: #888; font-size: 9px;">Planets</label>
+                    <span style="color: #00FF00; font-size: 10px;">${sys.config.planets?.length || 0}</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 50px 1fr; gap: 4px; align-items: center; margin-bottom: 4px;">
+                    <label style="color: #888; font-size: 9px;">Star</label>
+                    <span style="color: #00FF00; font-size: 10px;">${sys.config.star?.type || 'yellow'}</span>
+                </div>
+
+                <button onclick="window.systemGenerator.loadClusterSystem('${sys.id}'); window.systemGenerator.switchPreviewMode('system');" style="
+                    width: 100%;
+                    padding: 4px 8px;
+                    background: rgba(107, 138, 255, 0.1);
+                    color: white;
+                    border: 2px solid #6B8AFF;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 10px;
+                    font-family: 'Courier New', monospace;
+                    font-weight: bold;
+                    transition: all 0.2s;
+                " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(107, 138, 255, 0.1)'">
+                    LOAD
+                </button>
+            </div>
+        `).join('');
+
+        superclusterContent.innerHTML = `
+            <div style="
+                display: grid;
+                grid-template-columns: repeat(5, 180px);
+                gap: 30px;
+                align-items: start;
+            ">
+                <!-- Spacer to match Ring & Moon Options height -->
+                <div style="visibility: hidden;"></div>
+
+                ${this.clusterSystems.length > 0
+                    ? systemCards
+                    : '<div style="grid-column: span 5; color: #888; font-size: 10px; text-align: center; padding: 40px;">No systems added yet.<br>Use "Add to Cluster" to save systems.</div>'
+                }
+            </div>
+        `;
+    }
+
+    switchPreviewMode(mode) {
+        console.log('[Preview] Switching to mode:', mode);
 
         const planetCardsContainer = document.getElementById('planet-cards-container');
         const superclusterContainer = document.getElementById('supercluster-config-container');
+
+        if (!planetCardsContainer || !superclusterContainer) {
+            console.warn('[Preview] Containers not found, tab may not be loaded yet');
+            return;
+        }
+
+        this.setPreviewMode(mode);
+
+        switch(mode) {
+            case 'supercluster':
+                planetCardsContainer.style.display = 'none';
+                superclusterContainer.style.display = 'block';
+                this.renderSuperclusterCards();
+                break;
+
+            case 'galaxy':
+                planetCardsContainer.style.display = 'none';
+                superclusterContainer.style.display = 'block';
+                this.renderGalaxyCards();
+                break;
+
+            case 'system':
+            case 'planet':
+                planetCardsContainer.style.display = 'block';
+                superclusterContainer.style.display = 'none';
+                break;
+        }
+    }
+
+    renderSuperclusterCards() {
         const superclusterContent = document.getElementById('supercluster-content');
+        if (!superclusterContent) return;
 
-        if (this.superclusterViewActive) {
-            planetCardsContainer.style.display = 'none';
-            superclusterContainer.style.display = 'block';
-
-            const systemCards = this.clusterSystems.map(sys => `
-                <div class="planet-tile" style="
-                    border-color: #00FFFF;
-                    width: 180px;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                ">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <div style="color: #FFD700; font-size: 11px; font-weight: bold; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            ${sys.name}
-                        </div>
-                        <button onclick="event.stopPropagation(); window.systemGenerator.removeClusterSystem('${sys.id}')" style="
-                            background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
-                            color: white;
-                            border: none;
-                            border-radius: 3px;
-                            padding: 2px 4px;
-                            cursor: pointer;
-                            font-size: 10px;
-                        ">X</button>
+        const systemCards = this.clusterSystems.map(sys => `
+            <div class="planet-tile" style="
+                border-color: #00FFFF;
+                width: 180px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            " onclick="window.systemGenerator.loadClusterSystem('${sys.id}'); window.systemGenerator.switchPreviewMode('system');">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <div
+                        style="color: #FFD700; font-size: 11px; font-weight: bold; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text;"
+                        ondblclick="event.stopPropagation(); window.systemGenerator.editSystemName('${sys.id}', this)"
+                        title="Double-click to rename"
+                    >
+                        ${sys.name}
                     </div>
-
-                    <div style="color: #888; font-size: 8px; margin-bottom: 4px;">
-                        ${new Date(sys.timestamp).toLocaleTimeString()}
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 50px 1fr; gap: 4px; align-items: center; margin-bottom: 2px;">
-                        <label style="color: #888; font-size: 9px;">Planets</label>
-                        <span style="color: #00FF00; font-size: 10px;">${sys.config.planets?.length || 0}</span>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 50px 1fr; gap: 4px; align-items: center; margin-bottom: 4px;">
-                        <label style="color: #888; font-size: 9px;">Star</label>
-                        <span style="color: #00FF00; font-size: 10px;">${sys.config.star?.type || 'yellow'}</span>
-                    </div>
-
-                    <button onclick="window.systemGenerator.loadClusterSystem('${sys.id}'); window.systemGenerator.toggleSuperclusterView();" style="
-                        width: 100%;
-                        padding: 4px 8px;
-                        background: rgba(107, 138, 255, 0.1);
+                    <button onclick="event.stopPropagation(); window.systemGenerator.removeClusterSystem('${sys.id}')" style="
+                        background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
                         color: white;
-                        border: 2px solid #6B8AFF;
-                        border-radius: 4px;
+                        border: none;
+                        border-radius: 3px;
+                        padding: 2px 4px;
                         cursor: pointer;
                         font-size: 10px;
-                        font-family: 'Courier New', monospace;
-                        font-weight: bold;
-                        transition: all 0.2s;
-                    " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(107, 138, 255, 0.1)'">
-                        LOAD
-                    </button>
+                    ">X</button>
                 </div>
-            `).join('');
 
-            superclusterContent.innerHTML = `
-                <div style="
-                    display: grid;
-                    grid-template-columns: repeat(5, 180px);
-                    gap: 30px;
-                    align-items: start;
+                <div style="color: #888; font-size: 8px; margin-bottom: 4px;">
+                    ${new Date(sys.timestamp).toLocaleTimeString()}
+                </div>
+
+                <div style="display: grid; grid-template-columns: 50px 1fr; gap: 4px; align-items: center; margin-bottom: 2px;">
+                    <label style="color: #888; font-size: 9px;">Planets</label>
+                    <span style="color: #00FF00; font-size: 10px;">${sys.config.planets?.length || 0}</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 50px 1fr; gap: 4px; align-items: center; margin-bottom: 4px;">
+                    <label style="color: #888; font-size: 9px;">Star</label>
+                    <span style="color: #00FF00; font-size: 10px;">${sys.config.star?.type || 'yellow'}</span>
+                </div>
+
+                <div style="text-align: center; color: #6B8AFF; font-size: 8px; margin-top: 4px; padding: 4px; background: rgba(107, 138, 255, 0.1); border-radius: 3px;">
+                    Click to view system
+                </div>
+            </div>
+        `).join('');
+
+        superclusterContent.innerHTML = `
+            <div style="
+                display: grid;
+                grid-template-columns: repeat(5, 180px);
+                gap: 30px;
+                align-items: start;
+            ">
+                <div style="visibility: hidden;"></div>
+
+                <div class="planet-tile" style="
+                    border-color: #00FFFF;
+                    grid-column: span 3;
+                    border-radius: 0 8px 8px 0;
+                    padding: 8px;
+                    overflow: hidden;
                 ">
-                    <!-- Ghost div to skip space under sidebar -->
-                    <div style="visibility: hidden;"></div>
-
-                    <!-- Supercluster Properties Card -->
-                    <div class="planet-tile" style="
-                        border-color: #00FFFF;
-                        grid-column: span 3;
-                        border-radius: 0 8px 8px 0;
-                    ">
-                        <div style="color: #00FFFF; font-size: 13px; font-weight: bold; margin-bottom: 8px; text-align: center;">
-                            Supercluster Configuration
+                    <div style="color: #00FFFF; font-size: 13px; font-weight: bold; margin-bottom: 8px; text-align: center;">
+                        Supercluster Configuration
                         </div>
 
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 8px;">
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 8px; padding: 0 4px;">
                             <div>
-                                <label style="color: #888; display: block; margin-bottom: 3px; font-size: 9px;">Name</label>
+                                <label style="color: #00FFFF; display: block; margin-bottom: 3px; font-size: 9px;">Name</label>
                                 <input type="text" value="${this.superclusterConfig.name}" class="polymir-input" style="
                                     width: 100%;
                                     padding: 4px;
                                     font-size: 10px;
+                                    border-color: #00FFFF;
                                 " onchange="window.systemGenerator.superclusterConfig.name = this.value">
                             </div>
                             <div>
-                                <label style="color: #888; display: block; margin-bottom: 3px; font-size: 9px;">Systems Count</label>
+                                <label style="color: #00FFFF; display: block; margin-bottom: 3px; font-size: 9px;">Systems Count</label>
                                 <input type="number" value="${this.clusterSystems.length}" readonly class="polymir-input" style="
                                     width: 100%;
                                     padding: 4px;
                                     font-size: 10px;
                                     color: #FFD700;
                                     background: rgba(0, 0, 0, 0.5);
+                                    border-color: #00FFFF;
                                 ">
                             </div>
                         </div>
 
                         <!-- Advanced Toggle -->
                         <div onclick="window.systemGenerator.toggleSuperclusterAdvanced()" style="
-                            color: #FE0089;
+                            color: #00FFFF;
                             font-size: 10px;
                             text-align: center;
-                            padding: 6px;
-                            border-top: 1px solid rgba(0, 255, 255, 0.2);
+                            padding: 8px;
+                            margin: 4px 0;
+                            border-top: 1px solid rgba(0, 255, 255, 0.3);
                             cursor: pointer;
                             transition: all 0.2s;
                             user-select: none;
-                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='transparent'">
+                        " onmouseover="this.style.background='rgba(0, 255, 255, 0.1)'" onmouseout="this.style.background='transparent'">
                             <span style="margin-right: 4px;">${this.superclusterAdvancedOpen ? '▼' : '▶'}</span>
                             Advanced Configuration
                         </div>
 
                         <!-- Advanced Panel -->
-                        <div id="supercluster-advanced-panel" style="display: ${this.superclusterAdvancedOpen ? 'block' : 'none'}; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0, 255, 255, 0.2);">
+                        <div id="supercluster-advanced-panel" style="display: ${this.superclusterAdvancedOpen ? 'block' : 'none'}; margin-top: 8px; padding: 8px 4px; border-top: 1px solid rgba(0, 255, 255, 0.2);">
                             <!-- Procedural Generation Toggle -->
                             <label style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; cursor: pointer;">
                                 <input type="checkbox" ${this.superclusterConfig.proceduralEnabled ? 'checked' : ''}
@@ -466,128 +606,78 @@ class SystemGeneratorMenuEnhanced {
                                 <span style="color: #00FF00; font-size: 10px; font-weight: bold;">Enable Procedural Generation</span>
                             </label>
 
-                            <div id="procedural-settings" style="display: ${this.superclusterConfig.proceduralEnabled ? 'block' : 'none'};">
-                                <!-- Star Distribution -->
-                                <div style="display: grid; grid-template-columns: auto 70px auto 70px; gap: 6px; align-items: center; margin-bottom: 8px;">
-                                    <label style="color: #888; font-size: 9px; white-space: nowrap;">Stars</label>
-                                    <input type="number" value="${this.superclusterConfig.starCount}" min="100" max="100000" class="polymir-input" style="
-                                        padding: 4px;
-                                        font-size: 9px;
-                                    " onchange="window.systemGenerator.superclusterConfig.starCount = parseInt(this.value)">
-                                    <label style="color: #888; font-size: 9px; white-space: nowrap;">Galaxies</label>
-                                    <input type="number" value="${this.superclusterConfig.galaxyCount}" min="1" max="100" class="polymir-input" style="
-                                        padding: 4px;
-                                        font-size: 9px;
-                                    " onchange="window.systemGenerator.superclusterConfig.galaxyCount = parseInt(this.value)">
+                            <div id="procedural-settings" style="display: ${this.superclusterConfig.proceduralEnabled ? 'block' : 'none'}; padding: 0 4px;">
+                                <!-- Universe Scale -->
+                                <div style="display: grid; grid-template-columns: auto 70px auto 70px; gap: 6px; align-items: center; margin-bottom: 6px; padding: 4px 0;">
+                                    <label style="color: #00FFFF; font-size: 8px;">Stars</label>
+                                    <input type="number" value="${this.superclusterConfig.starCount}" min="100" max="100000" class="polymir-input" style="padding: 3px; font-size: 8px; border-color: #00FFFF;" onchange="window.systemGenerator.superclusterConfig.starCount = parseInt(this.value)">
+                                    <label style="color: #00FFFF; font-size: 8px;">Galaxies</label>
+                                    <input type="number" value="${this.superclusterConfig.galaxyCount}" min="1" max="100" class="polymir-input" style="padding: 3px; font-size: 8px; border-color: #00FFFF;" onchange="window.systemGenerator.superclusterConfig.galaxyCount = parseInt(this.value)">
                                 </div>
 
-                                <!-- Planet Generation Settings -->
-                                <div style="background: rgba(0, 0, 0, 0.3); padding: 6px; border-radius: 4px; margin-bottom: 8px;">
-                                    <div style="color: #6B8AFF; font-size: 9px; font-weight: bold; margin-bottom: 6px;">Planet Generation</div>
-
-                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
-                                        <div>
-                                            <label style="color: #888; font-size: 8px;">Min Planets</label>
-                                            <input type="number" value="${this.superclusterConfig.proceduralSettings.minPlanets}" min="0" max="20" class="polymir-input" style="
-                                                width: 100%;
-                                                padding: 2px;
-                                                font-size: 9px;
-                                            " onchange="window.systemGenerator.superclusterConfig.proceduralSettings.minPlanets = parseInt(this.value)">
+                                <!-- Two Column Layout -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                    <!-- Left Column: System Properties -->
+                                    <div style="padding-right: 6px;">
+                                        <div style="background: rgba(0, 0, 0, 0.2); padding: 4px; border-radius: 3px; margin-bottom: 4px;">
+                                            <div style="display: grid; grid-template-columns: auto 60px; gap: 4px; align-items: center; margin-bottom: 3px;">
+                                                <label style="color: #00FFFF; font-size: 8px;">Min Planets</label>
+                                                <input type="number" value="${this.superclusterConfig.proceduralSettings.minPlanets}" min="0" max="20" class="polymir-input" style="padding: 2px; font-size: 8px; border-color: #00FFFF;" onchange="window.systemGenerator.superclusterConfig.proceduralSettings.minPlanets = parseInt(this.value)">
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: auto 60px; gap: 4px; align-items: center;">
+                                                <label style="color: #00FFFF; font-size: 8px;">Max Planets</label>
+                                                <input type="number" value="${this.superclusterConfig.proceduralSettings.maxPlanets}" min="1" max="20" class="polymir-input" style="padding: 2px; font-size: 8px; border-color: #00FFFF;" onchange="window.systemGenerator.superclusterConfig.proceduralSettings.maxPlanets = parseInt(this.value)">
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label style="color: #888; font-size: 8px;">Max Planets</label>
-                                            <input type="number" value="${this.superclusterConfig.proceduralSettings.maxPlanets}" min="1" max="20" class="polymir-input" style="
-                                                width: 100%;
-                                                padding: 2px;
-                                                font-size: 9px;
-                                            " onchange="window.systemGenerator.superclusterConfig.proceduralSettings.maxPlanets = parseInt(this.value)">
+
+                                        <div style="background: rgba(0, 0, 0, 0.2); padding: 4px; border-radius: 3px;">
+                                            <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
+                                                <label style="color: #00FFFF; font-size: 7px;">Ringworld</label>
+                                                <span style="color: #00FFFF; font-size: 7px;">${Math.round(this.superclusterConfig.proceduralSettings.ringworldChance * 100)}%</span>
+                                            </div>
+                                            <input type="range" value="${this.superclusterConfig.proceduralSettings.ringworldChance * 100}" min="0" max="100" step="1" style="width: 100%;" oninput="window.systemGenerator.superclusterConfig.proceduralSettings.ringworldChance = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                            <label style="display: flex; align-items: center; gap: 3px; cursor: pointer; margin-top: 2px;">
+                                                <input type="checkbox" ${this.superclusterConfig.proceduralSettings.ringworldsHavePlanets ? 'checked' : ''} onchange="window.systemGenerator.superclusterConfig.proceduralSettings.ringworldsHavePlanets = this.checked">
+                                                <span style="color: #00FFFF; font-size: 7px;">+ other planets</span>
+                                            </label>
                                         </div>
                                     </div>
 
-                                    <!-- Ringworld Settings -->
-                                    <div style="margin-bottom: 6px;">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                            <label style="color: #888; font-size: 8px;">Ringworld Chance</label>
-                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.ringworldChance * 100)}%</span>
-                                        </div>
-                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.ringworldChance * 100}" min="0" max="100" step="1" class="polymir-input" style="
-                                            width: 100%;
-                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.ringworldChance = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
-                                    </div>
-
-                                    <div style="margin-bottom: 6px;">
-                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
-                                            <input type="checkbox" ${this.superclusterConfig.proceduralSettings.ringworldsHavePlanets ? 'checked' : ''}
-                                                   onchange="window.systemGenerator.superclusterConfig.proceduralSettings.ringworldsHavePlanets = this.checked">
-                                            <span style="color: #888; font-size: 8px;">Ringworlds have planets</span>
-                                        </label>
-                                    </div>
-
-                                    <!-- Moon Chance -->
-                                    <div style="margin-bottom: 6px;">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                            <label style="color: #888; font-size: 8px;">Moon Chance</label>
-                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.moonChance * 100)}%</span>
-                                        </div>
-                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.moonChance * 100}" min="0" max="100" step="1" class="polymir-input" style="
-                                            width: 100%;
-                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.moonChance = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
-                                    </div>
-
-                                    <!-- Chaos -->
-                                    <div style="margin-bottom: 6px;">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                            <label style="color: #888; font-size: 8px;">Chaos</label>
-                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.chaos * 100)}%</span>
-                                        </div>
-                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.chaos * 100}" min="0" max="100" step="1" class="polymir-input" style="
-                                            width: 100%;
-                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.chaos = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
-                                    </div>
-
-                                    <!-- Terrain Variety -->
-                                    <div style="margin-bottom: 6px;">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                            <label style="color: #888; font-size: 8px;">Terrain Variety</label>
-                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.terrainVariety * 100)}%</span>
-                                        </div>
-                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.terrainVariety * 100}" min="0" max="100" step="1" class="polymir-input" style="
-                                            width: 100%;
-                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.terrainVariety = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
-                                    </div>
-
-                                    <!-- Structure Density -->
-                                    <div>
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                            <label style="color: #888; font-size: 8px;">Structure Density</label>
-                                            <span style="color: #FFD700; font-size: 8px;">${Math.round(this.superclusterConfig.proceduralSettings.structureDensity * 100)}%</span>
-                                        </div>
-                                        <input type="range" value="${this.superclusterConfig.proceduralSettings.structureDensity * 100}" min="0" max="100" step="1" class="polymir-input" style="
-                                            width: 100%;
-                                        " oninput="window.systemGenerator.superclusterConfig.proceduralSettings.structureDensity = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                    <!-- Right Column: Variation Sliders -->
+                                    <div style="background: rgba(0, 0, 0, 0.2); padding: 4px; border-radius: 3px; padding-left: 6px;">
+                                        ${[
+                                            {label: 'Moon Chance', key: 'moonChance'},
+                                            {label: 'Chaos', key: 'chaos'},
+                                            {label: 'Terrain', key: 'terrainVariety'},
+                                            {label: 'Structures', key: 'structureDensity'}
+                                        ].map(({label, key}) => `
+                                            <div style="margin-bottom: 3px;">
+                                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px;">
+                                                    <label style="color: #00FFFF; font-size: 7px;">${label}</label>
+                                                    <span style="color: #00FFFF; font-size: 7px;">${Math.round(this.superclusterConfig.proceduralSettings[key] * 100)}%</span>
+                                                </div>
+                                                <input type="range" value="${this.superclusterConfig.proceduralSettings[key] * 100}" min="0" max="100" step="1" style="width: 100%;" oninput="window.systemGenerator.superclusterConfig.proceduralSettings.${key} = parseFloat(this.value) / 100; this.previousElementSibling.querySelector('span').textContent = this.value + '%'">
+                                            </div>
+                                        `).join('')}
                                     </div>
                                 </div>
 
                                 <!-- Biome Filters -->
-                                <div style="background: rgba(0, 0, 0, 0.3); padding: 6px; border-radius: 4px;">
-                                    <div style="color: #6B8AFF; font-size: 9px; font-weight: bold; margin-bottom: 4px;">Biome Filters</div>
-                                    <div style="font-size: 8px; color: #888; margin-bottom: 4px;">
-                                        Click to ban biomes from generation
-                                    </div>
-                                    <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                                <div style="background: rgba(0, 0, 0, 0.2); padding: 4px; border-radius: 3px; margin-top: 6px;">
+                                    <div style="color: #00FFFF; font-size: 7px; margin-bottom: 3px;">Ban Biomes</div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 3px;">
                                         ${['temperate', 'ice', 'desert', 'ocean', 'volcanic', 'toxic'].map(biome => {
                                             const isBanned = this.superclusterConfig.proceduralSettings.bannedBiomes.includes(biome);
                                             return `
                                                 <button onclick="window.systemGenerator.toggleBannedBiome('${biome}')" style="
-                                                    padding: 2px 6px;
-                                                    font-size: 8px;
-                                                    background: ${isBanned ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)'};
-                                                    color: ${isBanned ? '#FF0000' : '#00FF00'};
-                                                    border: 1px solid ${isBanned ? '#FF0000' : '#00FF00'};
-                                                    border-radius: 3px;
+                                                    padding: 2px 4px;
+                                                    font-size: 7px;
+                                                    background: ${isBanned ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 255, 0.2)'};
+                                                    color: ${isBanned ? '#FF0000' : '#00FFFF'};
+                                                    border: 1px solid ${isBanned ? '#FF0000' : '#00FFFF'};
+                                                    border-radius: 2px;
                                                     cursor: pointer;
-                                                    transition: all 0.2s;
-                                                " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='${isBanned ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)'}'">
+                                                " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='${isBanned ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 255, 0.2)'}'">
                                                     ${isBanned ? '✗' : '✓'} ${biome}
                                                 </button>
                                             `;
@@ -605,16 +695,11 @@ class SystemGeneratorMenuEnhanced {
                     }
                 </div>
             `;
-        } else {
-            planetCardsContainer.style.display = 'block';
-            superclusterContainer.style.display = 'none';
-        }
     }
 
     toggleSuperclusterAdvanced() {
         this.superclusterAdvancedOpen = !this.superclusterAdvancedOpen;
-        this.toggleSuperclusterView();
-        this.toggleSuperclusterView();
+        this.renderSuperclusterCards();
     }
 
     toggleProceduralGeneration(enabled) {
@@ -635,8 +720,7 @@ class SystemGeneratorMenuEnhanced {
             bannedBiomes.push(biome);
         }
 
-        this.toggleSuperclusterView();
-        this.toggleSuperclusterView();
+        this.renderSuperclusterCards();
     }
 
     updatePreviewForMode() {
@@ -645,6 +729,9 @@ class SystemGeneratorMenuEnhanced {
         this.clearPreviewPlanets();
 
         switch(this.previewMode) {
+            case 'supercluster':
+                this.renderSuperclusterView();
+                break;
             case 'galaxy':
                 this.renderGalaxyView();
                 break;
@@ -672,58 +759,479 @@ class SystemGeneratorMenuEnhanced {
             }
         });
         this.previewPlanets = [];
+        this.superclusterCube = null;
+        this.superclusterDust = null;
+    }
+
+    renderSuperclusterView() {
+        console.log('[Preview] Rendering supercluster view');
+        console.log('[Preview] Cluster systems count:', this.clusterSystems?.length || 0);
+        this.setupPreviewCamera();
+
+        this.engine.camera.far = 50000;
+        this.engine.camera.updateProjectionMatrix();
+
+        this.engine.camera.position.set(6000, 6000, 6000);
+        this.engine.camera.lookAt(0, 0, 0);
+        console.log('[Preview] Camera positioned at:', this.engine.camera.position);
+
+        const superclusterGroup = new THREE.Group();
+        superclusterGroup.userData.cubeRotation = 0;
+        this.superclusterCube = superclusterGroup;
+        this.engine.scene.add(superclusterGroup);
+        this.previewPlanets.push(superclusterGroup);
+
+        const ambientLight = new THREE.AmbientLight(0x4444ff, 0.3);
+        this.engine.scene.add(ambientLight);
+        this.previewPlanets.push(ambientLight);
+
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        keyLight.position.set(5000, 8000, 5000);
+        this.engine.scene.add(keyLight);
+        this.previewPlanets.push(keyLight);
+
+        const fillLight = new THREE.DirectionalLight(0x6688ff, 0.6);
+        fillLight.position.set(-5000, 0, -5000);
+        this.engine.scene.add(fillLight);
+        this.previewPlanets.push(fillLight);
+
+        const rimLight = new THREE.DirectionalLight(0xff88ff, 0.4);
+        rimLight.position.set(0, -5000, 5000);
+        this.engine.scene.add(rimLight);
+        this.previewPlanets.push(rimLight);
+
+        const cubeSize = 10000;
+        const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+        const cubeEdges = new THREE.EdgesGeometry(cubeGeometry);
+        const cubeMaterial = new THREE.LineBasicMaterial({
+            color: 0x88ccff,
+            transparent: true,
+            opacity: 0.6,
+            linewidth: 2
+        });
+        const wireframeCube = new THREE.LineSegments(cubeEdges, cubeMaterial);
+        superclusterGroup.add(wireframeCube);
+        console.log('[Preview] Wireframe cube added to scene');
+
+        const systems = this.clusterSystems || [];
+        const currentSystem = this.systemConfigTab?.getSystemConfig();
+        const allSystems = currentSystem ? [currentSystem, ...systems] : systems;
+
+        const numGalaxies = Math.max(1, Math.ceil(allSystems.length / 8));
+        const galaxyCenters = [];
+
+        for (let g = 0; g < numGalaxies; g++) {
+            const angle = (g / numGalaxies) * Math.PI * 2;
+            const radius = cubeSize * 0.25;
+            const centerX = Math.cos(angle) * radius;
+            const centerY = (Math.random() - 0.5) * cubeSize * 0.3;
+            const centerZ = Math.sin(angle) * radius;
+
+            galaxyCenters.push({ x: centerX, y: centerY, z: centerZ });
+
+            const galacticCenterGeometry = new THREE.SphereGeometry(80, 32, 32);
+            const galacticCenterMaterial = new THREE.MeshStandardMaterial({
+                color: 0x000000,
+                emissive: 0x440088,
+                emissiveIntensity: 0.8,
+                roughness: 0.2,
+                metalness: 0.8
+            });
+            const galacticCenter = new THREE.Mesh(galacticCenterGeometry, galacticCenterMaterial);
+            galacticCenter.position.set(centerX, centerY, centerZ);
+            superclusterGroup.add(galacticCenter);
+
+            const centerGlow = new THREE.PointLight(0x8800ff, 2.0, 1000);
+            centerGlow.position.set(centerX, centerY, centerZ);
+            superclusterGroup.add(centerGlow);
+
+            const accretionDiskCount = 500;
+            const diskGeometry = new THREE.BufferGeometry();
+            const diskPositions = new Float32Array(accretionDiskCount * 3);
+            const diskColors = new Float32Array(accretionDiskCount * 3);
+
+            for (let i = 0; i < accretionDiskCount; i++) {
+                const diskAngle = Math.random() * Math.PI * 2;
+                const diskRadius = 100 + Math.random() * 300;
+                const diskX = centerX + Math.cos(diskAngle) * diskRadius;
+                const diskY = centerY + (Math.random() - 0.5) * 30;
+                const diskZ = centerZ + Math.sin(diskAngle) * diskRadius;
+
+                diskPositions[i * 3] = diskX;
+                diskPositions[i * 3 + 1] = diskY;
+                diskPositions[i * 3 + 2] = diskZ;
+
+                const brightness = 0.5 + Math.random() * 0.5;
+                diskColors[i * 3] = brightness * 0.6;
+                diskColors[i * 3 + 1] = brightness * 0.3;
+                diskColors[i * 3 + 2] = brightness * 1.0;
+            }
+
+            diskGeometry.setAttribute('position', new THREE.BufferAttribute(diskPositions, 3));
+            diskGeometry.setAttribute('color', new THREE.BufferAttribute(diskColors, 3));
+
+            const diskMaterial = new THREE.PointsMaterial({
+                size: 15,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending,
+                sizeAttenuation: true,
+                depthWrite: false
+            });
+
+            const accretionDisk = new THREE.Points(diskGeometry, diskMaterial);
+            superclusterGroup.add(accretionDisk);
+        }
+
+        const dustParticleCount = 15000;
+        const dustGeometry = new THREE.BufferGeometry();
+        const dustPositions = new Float32Array(dustParticleCount * 3);
+        const dustColors = new Float32Array(dustParticleCount * 3);
+        const dustSizes = new Float32Array(dustParticleCount);
+
+        for (let i = 0; i < dustParticleCount; i++) {
+            dustPositions[i * 3] = (Math.random() - 0.5) * cubeSize * 0.95;
+            dustPositions[i * 3 + 1] = (Math.random() - 0.5) * cubeSize * 0.95;
+            dustPositions[i * 3 + 2] = (Math.random() - 0.5) * cubeSize * 0.95;
+
+            const brightness = 0.2 + Math.random() * 0.3;
+            dustColors[i * 3] = brightness * 0.7;
+            dustColors[i * 3 + 1] = brightness * 0.8;
+            dustColors[i * 3 + 2] = brightness * 1.0;
+
+            dustSizes[i] = 15 + Math.random() * 30;
+        }
+
+        dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+        dustGeometry.setAttribute('color', new THREE.BufferAttribute(dustColors, 3));
+        dustGeometry.setAttribute('size', new THREE.BufferAttribute(dustSizes, 1));
+
+        const dustMaterial = new THREE.PointsMaterial({
+            size: 25,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.12,
+            blending: THREE.AdditiveBlending,
+            sizeAttenuation: true,
+            depthWrite: false
+        });
+
+        const dustCloud = new THREE.Points(dustGeometry, dustMaterial);
+        dustCloud.userData.dustRotation = Math.random() * Math.PI * 2;
+        superclusterGroup.add(dustCloud);
+        this.superclusterDust = dustCloud;
+
+        allSystems.forEach((system, sysIndex) => {
+            const galaxyIndex = Math.floor(sysIndex / 8) % numGalaxies;
+            const galaxyCenter = galaxyCenters[galaxyIndex];
+            const systemInGalaxy = sysIndex % 8;
+
+            const spiralAngle = (systemInGalaxy / 8) * Math.PI * 2 + (galaxyIndex * 0.5);
+            const spiralRadius = 800 + (systemInGalaxy * 200);
+            const spiralTightness = 1.5;
+
+            const x = galaxyCenter.x + Math.cos(spiralAngle + spiralRadius * spiralTightness / 1000) * spiralRadius;
+            const y = galaxyCenter.y + (Math.random() - 0.5) * 200;
+            const z = galaxyCenter.z + Math.sin(spiralAngle + spiralRadius * spiralTightness / 1000) * spiralRadius;
+
+            const starRadius = (system.star?.radius || 60) * 1.2;
+            const starGeometry = new THREE.SphereGeometry(starRadius, 16, 16);
+            const starMaterial = new THREE.MeshStandardMaterial({
+                color: 0xFFEE99,
+                emissive: 0xFFBB44,
+                emissiveIntensity: 2.5,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+            const starMesh = new THREE.Mesh(starGeometry, starMaterial);
+            starMesh.position.set(x, y, z);
+            superclusterGroup.add(starMesh);
+
+            const starLight = new THREE.PointLight(0xFFDD88, 1.0, starRadius * 15);
+            starLight.position.set(x, y, z);
+            superclusterGroup.add(starLight);
+        });
     }
 
     renderGalaxyView() {
         console.log('[Preview] Rendering galaxy view');
         this.setupPreviewCamera();
-        this.engine.camera.position.set(0, 1000, 2000);
+        this.engine.camera.position.set(0, 3000, 5000);
         this.engine.camera.lookAt(0, 0, 0);
 
-        const systemConfig = this.systemConfigTab?.getSystemConfig();
-        if (!systemConfig || !systemConfig.planets) return;
-
-        systemConfig.planets.forEach((planet, index) => {
-            const angle = (index / systemConfig.planets.length) * Math.PI * 2;
-            const orbitRadius = planet.orbitalRadius || 150;
-            const x = Math.cos(angle) * orbitRadius;
-            const z = Math.sin(angle) * orbitRadius;
-
-            const distance = this.engine.camera.position.distanceTo(
-                new THREE.Vector3(x, 0, z)
-            );
-
-            const apparentSize = (planet.radius || 20) / distance * 1000;
-
-            if (apparentSize > 5) {
-                const geometry = new THREE.SphereGeometry(planet.radius || 20, 16, 16);
-                const material = new THREE.MeshBasicMaterial({
-                    color: this.getPlanetColor(planet),
-                    opacity: 0.9,
-                    transparent: true
-                });
-
-                const mesh = new THREE.Mesh(geometry, material);
-                mesh.position.set(x, 0, z);
-                this.engine.scene.add(mesh);
-                this.previewPlanets.push(mesh);
-            } else {
-                const geometry = new THREE.BufferGeometry();
-                const vertices = new Float32Array([0, 0, 0]);
-                geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-
-                const material = new THREE.PointsMaterial({
-                    color: this.getPlanetColor(planet),
-                    size: 3,
-                    sizeAttenuation: false
-                });
-
-                const point = new THREE.Points(geometry, material);
-                point.position.set(x, 0, z);
-                this.engine.scene.add(point);
-                this.previewPlanets.push(point);
-            }
+        const galacticCenterGeometry = new THREE.SphereGeometry(150, 32, 32);
+        const galacticCenterMaterial = new THREE.MeshStandardMaterial({
+            color: 0x000000,
+            emissive: 0x440088,
+            emissiveIntensity: 1.5,
+            roughness: 0.2,
+            metalness: 0.8
         });
+        const galacticCenter = new THREE.Mesh(galacticCenterGeometry, galacticCenterMaterial);
+        galacticCenter.position.set(0, 0, 0);
+        this.engine.scene.add(galacticCenter);
+        this.previewPlanets.push(galacticCenter);
+
+        const centerGlow = new THREE.PointLight(0x8800ff, 3.0, 2000);
+        centerGlow.position.set(0, 0, 0);
+        this.engine.scene.add(centerGlow);
+        this.previewPlanets.push(centerGlow);
+
+        const ambientLight = new THREE.AmbientLight(0x2244ff, 0.2);
+        this.engine.scene.add(ambientLight);
+        this.previewPlanets.push(ambientLight);
+
+        
+        const systems = this.clusterSystems || [];
+        const currentSystem = this.systemConfigTab?.getSystemConfig();
+        const allSystems = currentSystem ? [currentSystem, ...systems] : systems;
+
+        
+        const systemData = allSystems.map((system, index) => {
+            const maxPlanetOrbit = system.planets?.reduce((max, p) =>
+                Math.max(max, (p.orbitalRadius || 150)), 0) || 150;
+            const starRadius = system.star?.radius || 60;
+            const systemRadius = (maxPlanetOrbit + starRadius) * 0.3; 
+
+            return {
+                system,
+                systemRadius,
+                index
+            };
+        });
+
+        
+        let currentOrbitRadius = 1500; 
+        const orbitSpacing = 400; 
+        const assignedOrbits = [];
+
+        systemData.forEach((data, sysIndex) => {
+            const { system, systemRadius } = data;
+
+            
+            let hasCollision = true;
+            let testRadius = currentOrbitRadius;
+
+            while (hasCollision) {
+                hasCollision = false;
+
+                for (const assigned of assignedOrbits) {
+                    const radialDiff = Math.abs(testRadius - assigned.orbitRadius);
+                    const minSeparation = systemRadius + assigned.systemRadius + 200;
+
+                    if (radialDiff < minSeparation) {
+                        hasCollision = true;
+                        testRadius += orbitSpacing;
+                        break;
+                    }
+                }
+            }
+
+            assignedOrbits.push({
+                system,
+                systemRadius,
+                orbitRadius: testRadius,
+                tilt: sysIndex * 5 
+            });
+
+            currentOrbitRadius = testRadius + orbitSpacing;
+        });
+
+        
+        assignedOrbits.forEach(({ system, orbitRadius, tilt }, sysIndex) => {
+            
+            const galacticOrbitCurve = new THREE.EllipseCurve(
+                0, 0,
+                orbitRadius, orbitRadius,
+                0, 2 * Math.PI,
+                false,
+                0
+            );
+            const galacticOrbitPoints = galacticOrbitCurve.getPoints(128);
+            const galacticOrbitGeometry = new THREE.BufferGeometry().setFromPoints(galacticOrbitPoints);
+            const galacticOrbitMaterial = new THREE.LineBasicMaterial({
+                color: 0x666666,
+                transparent: true,
+                opacity: 0.2
+            });
+            const galacticOrbitLine = new THREE.Line(galacticOrbitGeometry, galacticOrbitMaterial);
+            galacticOrbitLine.rotation.x = Math.PI / 2 + (tilt * Math.PI / 180); 
+            this.engine.scene.add(galacticOrbitLine);
+            this.previewPlanets.push(galacticOrbitLine);
+
+            
+            const starSystemGroup = new THREE.Group();
+
+            
+            if (sysIndex === 0 && this.previewStar) {
+                this.previewStar.position.set(0, 0, 0);
+                starSystemGroup.add(this.previewStar);
+
+                
+                if (this.previewDustParticles) {
+                    this.previewDustParticles.position.set(0, 0, 0);
+                    starSystemGroup.add(this.previewDustParticles);
+                }
+            } else {
+                
+                const starGeometry = new THREE.SphereGeometry(20, 16, 16);
+                const starMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xFFD700
+                });
+                const starMesh = new THREE.Mesh(starGeometry, starMaterial);
+                starMesh.position.set(0, 0, 0);
+                starSystemGroup.add(starMesh);
+            }
+
+            
+            if (system.planets) {
+                system.planets.forEach((planet, index) => {
+                    const angle = (index / system.planets.length) * Math.PI * 2;
+                    const planetOrbitRadius = (planet.orbitalRadius || 150) * 0.3;
+                    const x = Math.cos(angle) * planetOrbitRadius;
+                    const z = Math.sin(angle) * planetOrbitRadius;
+
+                    
+                    const planetOrbitCurve = new THREE.EllipseCurve(
+                        0, 0,
+                        planetOrbitRadius, planetOrbitRadius,
+                        0, 2 * Math.PI,
+                        false,
+                        0
+                    );
+                    const planetOrbitPoints = planetOrbitCurve.getPoints(64);
+                    const planetOrbitGeometry = new THREE.BufferGeometry().setFromPoints(planetOrbitPoints);
+                    const planetOrbitMaterial = new THREE.LineBasicMaterial({
+                        color: 0x444444,
+                        transparent: true,
+                        opacity: 0.2
+                    });
+                    const planetOrbitLine = new THREE.Line(planetOrbitGeometry, planetOrbitMaterial);
+                    planetOrbitLine.rotation.x = Math.PI / 2;
+                    starSystemGroup.add(planetOrbitLine);
+
+                    
+                    const geometry = new THREE.BufferGeometry();
+                    const vertices = new Float32Array([0, 0, 0]);
+                    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+
+                    const material = new THREE.PointsMaterial({
+                        color: this.getPlanetColor(planet),
+                        size: 2,
+                        sizeAttenuation: false
+                    });
+
+                    const point = new THREE.Points(geometry, material);
+                    point.position.set(x, 0, z);
+                    starSystemGroup.add(point);
+                });
+            }
+
+            
+            const systemAngle = (sysIndex / Math.max(assignedOrbits.length, 1)) * Math.PI * 2;
+            const systemX = Math.cos(systemAngle) * orbitRadius;
+            const systemZ = Math.sin(systemAngle) * orbitRadius;
+            starSystemGroup.position.set(systemX, 0, systemZ);
+
+            this.engine.scene.add(starSystemGroup);
+            this.previewPlanets.push(starSystemGroup);
+        });
+
+        const numArms = 2;
+        const coreParticles = 2000;
+        const particlesPerArm = 5000;
+        const totalParticles = coreParticles + (numArms * particlesPerArm);
+
+        const spiralDustGeometry = new THREE.BufferGeometry();
+        const spiralDustPositions = new Float32Array(totalParticles * 3);
+        const spiralDustColors = new Float32Array(totalParticles * 3);
+        const spiralDustSizes = new Float32Array(totalParticles);
+
+        let particleIndex = 0;
+
+        for (let i = 0; i < coreParticles; i++) {
+            const radius = Math.pow(Math.random(), 1.5) * 600;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = (Math.random() - 0.5) * Math.PI * 0.15;
+
+            const x = radius * Math.cos(theta);
+            const y = radius * Math.sin(phi) * 80;
+            const z = radius * Math.sin(theta);
+
+            spiralDustPositions[particleIndex * 3] = x;
+            spiralDustPositions[particleIndex * 3 + 1] = y;
+            spiralDustPositions[particleIndex * 3 + 2] = z;
+
+            const coreBrightness = 0.8 + Math.random() * 0.2;
+            spiralDustColors[particleIndex * 3] = coreBrightness;
+            spiralDustColors[particleIndex * 3 + 1] = coreBrightness * 0.95;
+            spiralDustColors[particleIndex * 3 + 2] = coreBrightness * 0.7;
+
+            spiralDustSizes[particleIndex] = 30 + Math.random() * 60;
+            particleIndex++;
+        }
+
+        for (let arm = 0; arm < numArms; arm++) {
+            const armOffset = arm * Math.PI;
+
+            for (let i = 0; i < particlesPerArm; i++) {
+                const t = i / particlesPerArm;
+                const radius = 600 + t * 4000;
+
+                const spiralTightness = 3.5;
+                const angle = armOffset + (Math.log(radius / 600 + 1) * spiralTightness);
+
+                const armWidth = 200 + t * 300;
+                const gaussianOffset = (Math.random() + Math.random() + Math.random() + Math.random() - 2) * armWidth * 0.25;
+                const perpAngle = angle + Math.PI / 2;
+
+                const densityFalloff = Math.exp(-t * 1.2);
+                const diskThickness = 100 + t * 150;
+
+                const x = Math.cos(angle) * radius + Math.cos(perpAngle) * gaussianOffset;
+                const y = (Math.random() - 0.5) * diskThickness * densityFalloff;
+                const z = Math.sin(angle) * radius + Math.sin(perpAngle) * gaussianOffset;
+
+                spiralDustPositions[particleIndex * 3] = x;
+                spiralDustPositions[particleIndex * 3 + 1] = y;
+                spiralDustPositions[particleIndex * 3 + 2] = z;
+
+                const coreFactor = 1 - t;
+                const edgeFactor = t;
+
+                const r = 0.6 + coreFactor * 0.4 + (Math.random() - 0.5) * 0.2;
+                const g = 0.7 + coreFactor * 0.25 + (Math.random() - 0.5) * 0.2;
+                const b = 0.5 + edgeFactor * 0.5 + (Math.random() - 0.5) * 0.2;
+
+                const brightness = (0.3 + Math.random() * 0.3) * (0.5 + densityFalloff * 0.5);
+
+                spiralDustColors[particleIndex * 3] = r * brightness;
+                spiralDustColors[particleIndex * 3 + 1] = g * brightness;
+                spiralDustColors[particleIndex * 3 + 2] = b * brightness;
+
+                spiralDustSizes[particleIndex] = (25 + Math.random() * 35) * (1 + densityFalloff * 0.5);
+                particleIndex++;
+            }
+        }
+
+        spiralDustGeometry.setAttribute('position', new THREE.BufferAttribute(spiralDustPositions, 3));
+        spiralDustGeometry.setAttribute('color', new THREE.BufferAttribute(spiralDustColors, 3));
+        spiralDustGeometry.setAttribute('size', new THREE.BufferAttribute(spiralDustSizes, 1));
+
+        const spiralDustMaterial = new THREE.PointsMaterial({
+            size: 35,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.25,
+            blending: THREE.AdditiveBlending,
+            sizeAttenuation: true,
+            depthWrite: false
+        });
+
+        const spiralArms = new THREE.Points(spiralDustGeometry, spiralDustMaterial);
+        this.engine.scene.add(spiralArms);
+        this.previewPlanets.push(spiralArms);
     }
 
     renderSystemView() {
@@ -739,6 +1247,27 @@ class SystemGeneratorMenuEnhanced {
             const x = Math.cos(angle) * orbitRadius;
             const z = Math.sin(angle) * orbitRadius;
 
+            
+            const orbitCurve = new THREE.EllipseCurve(
+                0, 0,           
+                orbitRadius, orbitRadius, 
+                0, 2 * Math.PI, 
+                false,          
+                0               
+            );
+            const orbitPoints = orbitCurve.getPoints(64);
+            const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+            const orbitMaterial = new THREE.LineBasicMaterial({
+                color: 0x444444,
+                transparent: true,
+                opacity: 0.3
+            });
+            const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+            orbitLine.rotation.x = Math.PI / 2; 
+            this.engine.scene.add(orbitLine);
+            this.previewPlanets.push(orbitLine);
+
+            
             const geometry = new THREE.SphereGeometry(planet.radius || 20, 32, 32);
             const material = new THREE.MeshPhongMaterial({
                 color: this.getPlanetColor(planet),
@@ -849,6 +1378,18 @@ class SystemGeneratorMenuEnhanced {
                 if (this.previewDustParticles && this.previewDustParticles.userData) {
                     this.previewDustParticles.userData.dustRotation += 0.0005;
                     this.previewDustParticles.rotation.y = this.previewDustParticles.userData.dustRotation;
+                }
+
+                if (this.superclusterCube && this.superclusterCube.userData) {
+                    this.superclusterCube.userData.cubeRotation += 0.001;
+                    this.superclusterCube.rotation.y = this.superclusterCube.userData.cubeRotation;
+                    this.superclusterCube.rotation.x = this.superclusterCube.userData.cubeRotation * 0.5;
+                }
+
+                if (this.superclusterDust && this.superclusterDust.userData) {
+                    this.superclusterDust.userData.dustRotation += 0.0003;
+                    this.superclusterDust.rotation.y = this.superclusterDust.userData.dustRotation;
+                    this.superclusterDust.rotation.x = this.superclusterDust.userData.dustRotation * 0.3;
                 }
 
                 this.engine.renderer.render(this.engine.scene, this.engine.camera);
@@ -1068,9 +1609,11 @@ class SystemGeneratorMenuEnhanced {
                 cursor: pointer;
                 font-family: 'Courier New', monospace;
             ">← Back to Menu</button>
-            <h1 style="color: #FFD700; margin: 0; text-shadow: 0 0 10px #FFD700; font-size: 18px;">
-                POLYMIR V3 - UNIVERSE CREATION ENGINE
-            </h1>
+            <div style="display: flex; flex-direction: column; align-items: center;">
+                <h1 style="color: #FFD700; margin: 0; text-shadow: 0 0 10px #FFD700; font-size: 18px;">
+                    POLYMIR V3 - UNIVERSE CREATION ENGINE
+                </h1>
+            </div>
             <div style="width: 100px;"></div>
         `;
 
@@ -1092,7 +1635,7 @@ class SystemGeneratorMenuEnhanced {
         
         const content = document.createElement('div');
         content.id = 'tab-content';
-        content.style.cssText = 'flex: 1; overflow: hidden; padding: 12px; position: relative; min-height: 0;';
+        content.style.cssText = 'flex: 1; overflow: visible; padding: 12px; position: relative;';
 
         
         menu.appendChild(header);
@@ -1101,12 +1644,21 @@ class SystemGeneratorMenuEnhanced {
         
         document.body.appendChild(menu);
         this.menuElement = menu;
-        
-        
+
+
         setTimeout(() => {
+            
+            if (this.systemConfigTab.planets.length === 0) {
+                this.systemConfigTab.loadPreset('earth');
+                this.systemConfigTab.loadPreset('mars');
+                this.systemConfigTab.loadPreset('jupiter');
+            }
+
             this.showSystemTab();
+
             
-            
+            setTimeout(() => this.refreshPreview(), 100);
+
             this.attachEventListeners();
         }, 0);
     }
@@ -1171,47 +1723,45 @@ class SystemGeneratorMenuEnhanced {
     showBiomesTab() {
         const content = document.getElementById('tab-content');
         content.innerHTML = `
-            <div style="padding: 20px;">
-                <h2 style="color: #FFD700; margin-bottom: 20px;">� Biome Structure Configuration</h2>
-                
-                <!-- Biome Structure Settings -->
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px;">
-                    ${this.createEnhancedBiomeCards()}
-                </div>
-                
-                <!-- Structure Spawn Rules -->
-                <div style="background: rgba(0, 255, 255, 0.1); border: 2px solid #00FFFF; border-radius: 15px; padding: 20px;">
-                    <h3 style="color: #00FFFF; margin-bottom: 15px;">� Global Structure Settings</h3>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+            <div style="padding: 12px;">
+                <!-- Global Structure Settings -->
+                <div style="background: rgba(0, 255, 255, 0.1); border: 1px solid #00FFFF; border-radius: 6px; padding: 8px; margin-bottom: 12px;">
+                    <h3 style="color: #00FFFF; margin-bottom: 6px; font-size: 11px;">Global Structure Settings</h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
                         <div>
-                            <label style="color: #00FF00;">Surface Structures</label>
-                            <div style="margin-top: 10px;">
-                                <label style="color: #888888; display: block; margin: 5px 0;">
-                                    <input type="checkbox" checked> Ancient Ruins (5% chance)
+                            <label style="color: #00FF00; font-size: 9px; font-weight: bold;">Surface Structures</label>
+                            <div style="margin-top: 4px;">
+                                <label style="color: #888888; display: block; margin: 2px 0; font-size: 8px;">
+                                    <input type="checkbox" checked style="width: 10px; height: 10px;"> Ancient Ruins (5%)
                                 </label>
-                                <label style="color: #888888; display: block; margin: 5px 0;">
-                                    <input type="checkbox" checked> Settlements (3% chance)
+                                <label style="color: #888888; display: block; margin: 2px 0; font-size: 8px;">
+                                    <input type="checkbox" checked style="width: 10px; height: 10px;"> Settlements (3%)
                                 </label>
-                                <label style="color: #888888; display: block; margin: 5px 0;">
-                                    <input type="checkbox"> Dungeons (2% chance)
+                                <label style="color: #888888; display: block; margin: 2px 0; font-size: 8px;">
+                                    <input type="checkbox" style="width: 10px; height: 10px;"> Dungeons (2%)
                                 </label>
                             </div>
                         </div>
                         <div>
-                            <label style="color: #00FF00;">Space Structures</label>
-                            <div style="margin-top: 10px;">
-                                <label style="color: #888888; display: block; margin: 5px 0;">
-                                    <input type="checkbox" checked> Space Stations (Orbit)
+                            <label style="color: #00FF00; font-size: 9px; font-weight: bold;">Space Structures</label>
+                            <div style="margin-top: 4px;">
+                                <label style="color: #888888; display: block; margin: 2px 0; font-size: 8px;">
+                                    <input type="checkbox" checked style="width: 10px; height: 10px;"> Space Stations
                                 </label>
-                                <label style="color: #888888; display: block; margin: 5px 0;">
-                                    <input type="checkbox" checked> Derelict Ships (Random)
+                                <label style="color: #888888; display: block; margin: 2px 0; font-size: 8px;">
+                                    <input type="checkbox" checked style="width: 10px; height: 10px;"> Derelict Ships
                                 </label>
-                                <label style="color: #888888; display: block; margin: 5px 0;">
-                                    <input type="checkbox"> Asteroid Bases (Belt only)
+                                <label style="color: #888888; display: block; margin: 2px 0; font-size: 8px;">
+                                    <input type="checkbox" style="width: 10px; height: 10px;"> Asteroid Bases
                                 </label>
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Biome Structure Settings -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+                    ${this.createEnhancedBiomeCards()}
                 </div>
             </div>
         `;
@@ -1222,98 +1772,99 @@ class SystemGeneratorMenuEnhanced {
      */
     createEnhancedBiomeCards() {
         const biomes = [
-            { 
-                type: 'desert', icon: '�', color: '#F4A460',
+            {
+                type: 'desert', color: '#F4A460',
                 structures: ['Pyramids', 'Oasis Towns', 'Sand Temples'],
                 vegetation: 10, resources: 'Rare minerals'
             },
-            { 
-                type: 'forest', icon: '�', color: '#228B22',
+            {
+                type: 'forest', color: '#228B22',
                 structures: ['Tree Villages', 'Druid Circles', 'Hidden Groves'],
                 vegetation: 90, resources: 'Wood, herbs'
             },
-            { 
-                type: 'ocean', icon: '�', color: '#4169E1',
+            {
+                type: 'ocean', color: '#4169E1',
                 structures: ['Underwater Cities', 'Coral Reefs', 'Shipwrecks'],
                 vegetation: 30, resources: 'Fish, pearls'
             },
-            { 
-                type: 'ice', icon: '', color: '#E0FFFF',
+            {
+                type: 'ice', color: '#E0FFFF',
                 structures: ['Ice Fortresses', 'Frozen Labs', 'Crystal Caves'],
                 vegetation: 5, resources: 'Ice crystals'
             },
-            { 
-                type: 'grassland', icon: '�', color: '#90EE90',
+            {
+                type: 'grassland', color: '#90EE90',
                 structures: ['Villages', 'Windmills', 'Stone Circles'],
                 vegetation: 60, resources: 'Crops, livestock'
             },
-            { 
-                type: 'mountains', icon: '', color: '#8B7355',
+            {
+                type: 'mountains', color: '#8B7355',
                 structures: ['Monasteries', 'Mine Shafts', 'Dragon Lairs'],
                 vegetation: 20, resources: 'Ore, gems'
             },
-            { 
-                type: 'lava', icon: '�', color: '#FF4500',
+            {
+                type: 'lava', color: '#FF4500',
                 structures: ['Obsidian Towers', 'Lava Forges', 'Fire Temples'],
                 vegetation: 0, resources: 'Obsidian, sulfur'
             },
-            { 
-                type: 'crystal', icon: '�', color: '#E6E6FA',
+            {
+                type: 'crystal', color: '#E6E6FA',
                 structures: ['Crystal Spires', 'Energy Nodes', 'Prism Gardens'],
                 vegetation: 15, resources: 'Energy crystals'
             },
-            { 
-                type: 'void', icon: '�', color: '#4B0082',
+            {
+                type: 'void', color: '#4B0082',
                 structures: ['Void Stations', 'Dark Obelisks', 'Null Zones'],
                 vegetation: 0, resources: 'Dark matter'
             }
         ];
-        
+
         return biomes.map(biome => `
             <div style="
                 background: linear-gradient(135deg, ${biome.color}22 0%, ${biome.color}11 100%);
-                border: 2px solid ${biome.color};
-                border-radius: 10px;
-                padding: 20px;
+                border: 1px solid ${biome.color};
+                border-radius: 6px;
+                padding: 8px;
                 cursor: pointer;
                 transition: all 0.3s;
                 position: relative;
                 overflow: hidden;
             " class="biome-card" data-biome="${biome.type}"
-               onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 5px 20px ${biome.color}66'"
+               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 3px 12px ${biome.color}66'"
                onmouseout="this.style.transform=''; this.style.boxShadow=''">
-                <h3 style="color: ${biome.color}; margin: 0 0 10px 0;">
-                    ${biome.icon} ${biome.type.toUpperCase()}
+                <h3 style="color: ${biome.color}; margin: 0 0 6px 0; font-size: 11px;">
+                    ${biome.type.toUpperCase()}
                 </h3>
-                
-                <div style="font-size: 12px; color: #CCCCCC; margin-bottom: 15px;">
-                    <div style="margin: 5px 0;">
-                        <span style="color: #00FF00;">Vegetation:</span> ${biome.vegetation}%
+
+                <div style="font-size: 8px; color: #CCCCCC; margin-bottom: 6px;">
+                    <div style="margin: 2px 0;">
+                        <span style="color: #00FF00;">Veg:</span> ${biome.vegetation}%
                     </div>
-                    <div style="margin: 5px 0;">
-                        <span style="color: #FFD700;">Resources:</span> ${biome.resources}
+                    <div style="margin: 2px 0;">
+                        <span style="color: #FFD700;">Res:</span> ${biome.resources}
                     </div>
                 </div>
-                
-                <div style="border-top: 1px solid ${biome.color}44; padding-top: 10px;">
-                    <div style="color: #00FFFF; font-size: 11px; margin-bottom: 8px;">UNIQUE STRUCTURES:</div>
+
+                <div style="border-top: 1px solid ${biome.color}44; padding-top: 4px;">
+                    <div style="color: #00FFFF; font-size: 8px; margin-bottom: 4px;">STRUCTURES:</div>
                     ${biome.structures.map(s => `
-                        <label style="display: block; margin: 3px 0; font-size: 11px;">
-                            <input type="checkbox" checked> ${s}
+                        <label style="display: block; margin: 2px 0; font-size: 8px;">
+                            <input type="checkbox" checked style="width: 10px; height: 10px;"> ${s}
                         </label>
                     `).join('')}
                 </div>
-                
+
                 <button onclick="window.configureBiomeDetails('${biome.type}')" style="
-                    margin-top: 10px;
-                    padding: 8px 16px;
+                    margin-top: 6px;
+                    padding: 4px 8px;
                     background: ${biome.color};
                     color: black;
                     border: none;
-                    border-radius: 5px;
+                    border-radius: 3px;
                     cursor: pointer;
                     width: 100%;
                     font-weight: bold;
+                    font-size: 9px;
                 "> Configure</button>
             </div>
         `).join('');
@@ -1372,7 +1923,7 @@ class SystemGeneratorMenuEnhanced {
     showLibraryTab() {
         const content = document.getElementById('tab-content');
 
-        // Add custom scrollbar styles if not already present
+        
         if (!document.getElementById('schematic-library-styles')) {
             const style = document.createElement('style');
             style.id = 'schematic-library-styles';
@@ -1652,7 +2203,7 @@ class SystemGeneratorMenuEnhanced {
      * Get icon for category (NO EMOJIS)
      */
     getCategoryIcon(category) {
-        // No icons - removed all emojis
+        
         return '';
     }
 
@@ -1720,7 +2271,7 @@ class SystemGeneratorMenuEnhanced {
                     border: 2px dashed rgba(255, 255, 255, 0.1);
                     border-radius: 10px;
                 ">
-                    <div style="font-size: 48px; margin-bottom: 20px; opacity: 0.5;">🔍</div>
+                    <div style="font-size: 48px; margin-bottom: 20px; opacity: 0.5;">�</div>
                     <div style="font-size: 16px; color: #FFD700; margin-bottom: 10px;">No results found</div>
                     <div style="font-size: 13px;">Try a different search term</div>
                 </div>
@@ -2132,21 +2683,24 @@ class SystemGeneratorMenuEnhanced {
 
         const systemConfig = this.systemConfigTab.getSystemConfig();
 
-        const systemName = systemConfig.star?.name || `System ${this.clusterSystems.length + 1}`;
+        const systemId = `system_${Date.now()}`;
+        const systemName = systemConfig.star?.name || GalaxyNaming.generateGalaxyName(systemId, false);
 
         const clusterSystem = {
-            id: `system_${Date.now()}`,
+            id: systemId,
             name: systemName,
             config: JSON.parse(JSON.stringify(systemConfig)),
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            galaxyId: this.currentGalaxy.id,
+            galaxyName: this.currentGalaxy.name
         };
 
         this.clusterSystems.push(clusterSystem);
+        this.currentGalaxy.systems.push(clusterSystem);
 
-        console.log(`System "${systemName}" added to cluster. Total systems: ${this.clusterSystems.length}`);
-        console.log('Cluster systems:', this.clusterSystems);
-
-        alert(`System "${systemName}" added to cluster!\n\nTotal systems in cluster: ${this.clusterSystems.length}\n\nYou can view and manage systems in the SUPERCLUSTER tab.`);
+        console.log(`System "${systemName}" added to galaxy "${this.currentGalaxy.name}" (${this.currentGalaxy.id})`);
+        console.log(`Total systems in cluster: ${this.clusterSystems.length}`);
+        console.log('Current galaxy:', this.currentGalaxy);
     }
 
     /**
@@ -2176,6 +2730,14 @@ class SystemGeneratorMenuEnhanced {
                     btn.classList.add('active');
                 }
             });
+
+            this.updatePreviewForMode();
+
+            if (window.game && window.game.cameraTransition) {
+                const systemCenter = new THREE.Vector3(0, 0, 0);
+                const systemRadius = 500;
+                window.game.cameraTransition.transitionToSystemCenter(systemCenter, systemRadius, 2.5);
+            }
         }
 
         console.log(`System "${system.name}" loaded into editor`);
@@ -2184,6 +2746,52 @@ class SystemGeneratorMenuEnhanced {
     /**
      * Remove a system from the cluster
      */
+    editSystemName(systemId, element) {
+        const system = this.clusterSystems.find(s => s.id === systemId);
+        if (!system) return;
+
+        const oldName = system.name;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = oldName;
+        input.style.cssText = element.style.cssText;
+        input.style.width = '100%';
+        input.style.background = 'rgba(0, 0, 0, 0.8)';
+        input.style.border = '1px solid #FFD700';
+        input.style.padding = '2px 4px';
+
+        const finishEdit = () => {
+            const newName = input.value.trim();
+            if (newName && newName !== oldName) {
+                system.name = newName;
+                console.log(`System renamed from "${oldName}" to "${newName}"`);
+            }
+
+            if (this.previewMode === 'supercluster') {
+                this.renderSuperclusterCards();
+            } else if (this.previewMode === 'galaxy') {
+                this.renderGalaxyCards();
+            }
+        };
+
+        input.onblur = finishEdit;
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                finishEdit();
+            } else if (e.key === 'Escape') {
+                if (this.previewMode === 'supercluster') {
+                    this.renderSuperclusterCards();
+                } else if (this.previewMode === 'galaxy') {
+                    this.renderGalaxyCards();
+                }
+            }
+        };
+
+        element.replaceWith(input);
+        input.focus();
+        input.select();
+    }
+
     removeClusterSystem(systemId) {
         const system = this.clusterSystems.find(s => s.id === systemId);
 
@@ -2195,8 +2803,12 @@ class SystemGeneratorMenuEnhanced {
         if (confirm(`Remove "${system.name}" from cluster?`)) {
             this.clusterSystems = this.clusterSystems.filter(s => s.id !== systemId);
             console.log(`System "${system.name}" removed. Remaining systems: ${this.clusterSystems.length}`);
-            this.toggleSuperclusterView();
-            this.toggleSuperclusterView();
+
+            if (this.previewMode === 'supercluster') {
+                this.renderSuperclusterCards();
+            } else if (this.previewMode === 'galaxy') {
+                this.renderGalaxyCards();
+            }
         }
     }
 
@@ -2730,7 +3342,7 @@ class SystemGeneratorMenuEnhanced {
      * Load saved worlds
      */
     loadSavedWorlds() {
-        
+
         try {
             const saved = localStorage.getItem('polymir-saved-systems');
             if (saved) {
@@ -2738,6 +3350,25 @@ class SystemGeneratorMenuEnhanced {
             }
         } catch (e) {
             console.error('Failed to load saved systems:', e);
+        }
+    }
+
+    saveBiomeConfiguration() {
+        if (this.biomeConfig) {
+            this.biomeConfig.saveToLocalStorage('universe_biome_config');
+            this.globalDefaults.biomes = this.biomeConfig.getBiomeDistribution();
+            console.log('Biome configuration saved:', this.biomeConfig.serialize());
+        }
+    }
+
+    getBiomeConfiguration() {
+        return this.biomeConfig;
+    }
+
+    updateBiomeDistribution(biome, weight) {
+        if (this.biomeConfig) {
+            this.biomeConfig.setBiomeDistribution(biome, weight);
+            this.globalDefaults.biomes = this.biomeConfig.getBiomeDistribution();
         }
     }
     

@@ -1,8 +1,5 @@
-
-
-
-
-
+import * as THREE from '../lib/three.module.js';
+import { PlanetNaming } from '../systems/GalaxyNaming.js';
 
 window.addRingWorld = function() {
     if (window.systemConfigTab) {
@@ -26,7 +23,7 @@ export class SystemConfigTabSimplified {
         this.nextPlanetId = 1;
         this.nextMoonId = 1;
         this.selectedPlanetId = null;
-        // this.previewRenderer = new PreviewRenderer(); 
+        
 
         
         this.planetNamePrefixes = ['Ke', 'Tra', 'Xer', 'Zor', 'Pol', 'Ven', 'Mar', 'Nep', 'Ura', 'Sat'];
@@ -293,37 +290,43 @@ export class SystemConfigTabSimplified {
             }
         };
 
-        
-        
-        
+
+
+
+        const earthBiome = this.planetPresets['earth'].biomeDistribution ? Object.keys(this.planetPresets['earth'].biomeDistribution)[0] : 'temperate';
         const earth = {
             ...this.planetPresets['earth'],
             id: this.nextPlanetId++,
+            name: this.generatePlanetName(earthBiome, 0),
             orbitalRadius: 150,
-            gravityRadius: 150 * 0.6 
+            gravityRadius: 150 * 0.6
         };
         this.planets.push(earth);
 
-        
+
+        const marsBiome = this.planetPresets['mars'].biomeDistribution ? Object.keys(this.planetPresets['mars'].biomeDistribution)[0] : 'desert';
         const mars = {
             ...this.planetPresets['mars'],
-            id: this.nextPlanetId++
+            id: this.nextPlanetId++,
+            name: this.generatePlanetName(marsBiome, 1)
         };
-        
+
         mars.gravityRadius = 250 * 0.6;
         mars.orbitalRadius = earth.orbitalRadius + (2 * (earth.gravityRadius + mars.gravityRadius));
         this.planets.push(mars);
 
-        
+
+        const jupiterBiome = this.planetPresets['jupiter'].biomeDistribution ? Object.keys(this.planetPresets['jupiter'].biomeDistribution)[0] : null;
         const jupiter = {
             ...this.planetPresets['jupiter'],
             id: this.nextPlanetId++,
+            name: this.generatePlanetName(jupiterBiome, 2),
             hasRings: true,
-            ringInnerRadius: 105, 
-            ringOuterRadius: 175, 
+            ringInnerRadius: 105,
+            ringOuterRadius: 175,
             ringColor: '#D2691E'
         };
-        
+
         jupiter.gravityRadius = 520 * 0.6;
         jupiter.orbitalRadius = mars.orbitalRadius + (2 * (mars.gravityRadius + jupiter.gravityRadius));
         this.planets.push(jupiter);
@@ -777,7 +780,7 @@ export class SystemConfigTabSimplified {
                                         cursor: pointer;
                                         transition: all 0.2s;
                                         backdrop-filter: blur(5px);
-                                    " onclick="window.systemGenerator?.toggleSuperclusterView()" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 255, 0.1)'">
+                                    " onclick="window.systemGenerator?.switchPreviewMode('supercluster')" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 255, 0.1)'">
                                         SUPERCLUSTER
                                     </button>
                                     <button class="preview-mode-btn" data-mode="galaxy" style="
@@ -790,7 +793,7 @@ export class SystemConfigTabSimplified {
                                         cursor: pointer;
                                         transition: all 0.2s;
                                         backdrop-filter: blur(5px);
-                                    " onclick="window.systemGenerator?.setPreviewMode('galaxy')">
+                                    " onclick="window.systemGenerator?.switchPreviewMode('galaxy')" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(100, 100, 255, 0.2)'">
                                         GALAXY
                                     </button>
                                     <button class="preview-mode-btn active" data-mode="system" style="
@@ -803,7 +806,7 @@ export class SystemConfigTabSimplified {
                                         cursor: pointer;
                                         transition: all 0.2s;
                                         backdrop-filter: blur(5px);
-                                    " onclick="window.systemGenerator?.setPreviewMode('system')">
+                                    " onclick="window.systemGenerator?.switchPreviewMode('system')" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(254, 0, 137, 0.4)'">
                                         SYSTEM
                                     </button>
                                     <button class="preview-mode-btn" data-mode="planet" style="
@@ -816,7 +819,7 @@ export class SystemConfigTabSimplified {
                                         cursor: pointer;
                                         transition: all 0.2s;
                                         backdrop-filter: blur(5px);
-                                    " onclick="window.systemGenerator?.setPreviewMode('planet')">
+                                    " onclick="window.systemGenerator?.switchPreviewMode('planet')" onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 100, 0.2)'">
                                         PLANET
                                     </button>
                                 </div>
@@ -859,7 +862,7 @@ export class SystemConfigTabSimplified {
                         </div>
 
                         <!-- Supercluster Configuration (hidden by default) -->
-                        <div id="supercluster-config-container" style="position: absolute; top: 340px; left: 0; right: -110px; bottom: -300px; z-index: 10; display: none; overflow-y: auto;">
+                        <div id="supercluster-config-container" style="position: absolute; top: 340px; left: 0; right: -110px; bottom: -800px; z-index: 10; display: none; overflow-y: auto;">
                             <div id="supercluster-content" style="color: white;">
                                 <!-- Supercluster content will be inserted here -->
                             </div>
@@ -914,35 +917,8 @@ export class SystemConfigTabSimplified {
                         " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(107, 138, 255, 0.1)'">ADD TO<br>CLUSTER</button>
 
                         <div style="height: 1px; background: #FE0089; margin: 2px 0;"></div>
-                        
+
                         <!-- Action buttons -->
-                        <button onclick="window.systemConfigTab.addPlanet()" style="
-                            padding: 2px 4px;
-                            background: rgba(0, 255, 0, 0.1);
-                            color: white;
-                            border: 2px solid #00FF00;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 10px;
-                            font-family: 'Courier New', monospace;
-                            width: 100%;
-                            transition: all 0.2s;
-                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(0, 255, 0, 0.1)'">+ ADD PLANET</button>
-
-                        <button onclick="window.addRingWorld()" style="
-                            padding: 2px 4px;
-                            background: rgba(255, 215, 0, 0.1);
-                            color: white;
-                            border: 2px solid #FFD700;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 10px;
-                            font-family: 'Courier New', monospace;
-                            width: 100%;
-                            margin-top: 2px;
-                            transition: all 0.2s;
-                        " onmouseover="this.style.background='rgba(100, 100, 255, 0.2)'" onmouseout="this.style.background='rgba(255, 215, 0, 0.1)'">+ ADD RING WORLD</button>
-
                         <button onclick="window.systemConfigTab.saveConfiguration()" style="
                             padding: 2px 4px;
                             background: rgba(255, 215, 0, 0.1);
@@ -1075,8 +1051,8 @@ export class SystemConfigTabSimplified {
         
         const isSelected = this.selectedPlanetId === planet.id;
         return `
-            <div class="planet-tile" onclick="window.systemConfigTab.selectPlanet(${planet.id})" style="
-                border-color: ${isSelected ? '#FFD700' : borderColor}; 
+            <div class="planet-tile" onclick="window.systemConfigTab.selectPlanet(${planet.id}); window.systemGenerator?.setPreviewMode('planet');" style="
+                border-color: ${isSelected ? '#FFD700' : borderColor};
                 background: ${isSelected ? 'rgba(255, 215, 0, 0.1)' : 'transparent'};
                 border-width: ${isSelected ? '2px' : '1px'};
                 box-shadow: ${isSelected ? '0 0 10px rgba(255, 215, 0, 0.5)' : 'none'};
@@ -1799,31 +1775,42 @@ export class SystemConfigTabSimplified {
     selectPlanet(planetId) {
         this.selectedPlanetId = planetId;
 
-        
         const planet = this.planets.find(p => p.id === planetId);
         if (!planet) return;
 
         console.log(`Selected planet: ${planet.name}`);
 
-        
         this.updatePreview();
+
+        if (window.game && window.game.cameraTransition) {
+            const planetPos = new THREE.Vector3(
+                planet.orbitalRadius || 0,
+                0,
+                0
+            );
+            window.game.cameraTransition.transitionToPlanet(planetPos, planet.radius || 20, 2.5);
+        }
     }
 
     /**
      * Add a new planet
      */
-    generatePlanetName() {
-        const prefix = this.planetNamePrefixes[Math.floor(Math.random() * this.planetNamePrefixes.length)];
-        const suffix = this.planetNameSuffixes[Math.floor(Math.random() * this.planetNameSuffixes.length)];
-        const number = this.planets.length + 1;
-        return `${prefix}${suffix}-${number}`;
+    generatePlanetName(biome = null, orbitIndex = null) {
+        const systemId = this.star?.name || 'Sol';
+        const index = orbitIndex !== null ? orbitIndex : this.planets.length;
+
+        const seed = PlanetNaming.hashString(`${systemId}_${index}`);
+        const planetId = PlanetNaming.generatePlanetId(systemId, index, seed);
+        const planetName = PlanetNaming.generatePlanetName(planetId, biome, index);
+
+        return planetName;
     }
 
     addPlanet(preset = null) {
 
         let orbitalRadius = 150;
 
-        // Ringworlds and star-centered bodies should keep their preset orbitalRadius (typically 0)
+        
         const isStarCentered = preset?.centeredOnStar || preset?.type === 'ringworld' || preset?.worldType === 'ring';
 
         if (this.planets.length > 0 && !isStarCentered) {
@@ -1843,30 +1830,33 @@ export class SystemConfigTabSimplified {
             orbitalRadius = lastPlanet.orbitalRadius + (2 * (lastGravityRadius + newGravityRadius));
         }
 
+        const orbitIndex = this.planets.length;
+        const biome = preset?.biomeDistribution ? Object.keys(preset.biomeDistribution)[0] : null;
+
         const newPlanet = preset ? {
             ...preset,
             id: this.nextPlanetId++,
-            name: this.generatePlanetName(),
+            name: this.generatePlanetName(biome, orbitIndex),
             worldType: preset.worldType || 'sphere',
             orbitalRadius: isStarCentered ? (preset.orbitalRadius || 0) : orbitalRadius,
             gravityRadius: orbitalRadius * 0.6,
-            axialTilt: preset.axialTilt !== undefined ? preset.axialTilt : Math.random() * 30, 
-            rotationSpeed: preset.rotationSpeed || (0.0005 + Math.random() * 0.002), 
-            orbitalSpeed: preset.orbitalSpeed || (0.0001 + Math.random() * 0.0005), 
-            gasGiantOnly: preset.gasGiantOnly || false 
+            axialTilt: preset.axialTilt !== undefined ? preset.axialTilt : Math.random() * 30,
+            rotationSpeed: preset.rotationSpeed || (0.0005 + Math.random() * 0.002),
+            orbitalSpeed: preset.orbitalSpeed || (0.0001 + Math.random() * 0.0005),
+            gasGiantOnly: preset.gasGiantOnly || false
         } : {
             id: this.nextPlanetId++,
-            name: this.generatePlanetName(),
+            name: this.generatePlanetName(null, orbitIndex),
             type: 'terrestrial',
             worldType: 'sphere',
-            radius: 20, 
+            radius: 20,
             orbitalRadius: orbitalRadius,
             gravityRadius: orbitalRadius * 0.6,
             orbitalPeriod: 365,
             rotationPeriod: 24,
-            axialTilt: Math.random() * 30, 
-            rotationSpeed: 0.0005 + Math.random() * 0.002, 
-            orbitalSpeed: 0.0001 + Math.random() * 0.0005, 
+            axialTilt: Math.random() * 30,
+            rotationSpeed: 0.0005 + Math.random() * 0.002,
+            orbitalSpeed: 0.0001 + Math.random() * 0.0005,
             waterLevel: 0,
             waterCoverage: 0,
             terrainAmplitude: 1000,

@@ -72,6 +72,10 @@ export class LoadingAnimation {
         this.loadingStatus = document.getElementById('loading-status');
         this.loadingBarFill = document.getElementById('loading-bar-fill');
         this.loadingPercent = document.getElementById('loading-percent');
+
+        if (this.loadingModal) {
+            this.loadingModal.classList.remove('hidden');
+        }
     }
 
     setupControls() {
