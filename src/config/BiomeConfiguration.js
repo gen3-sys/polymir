@@ -46,6 +46,11 @@ export class BiomeConfiguration {
 
         this.seed = config.seed || Math.floor(Math.random() * 1000000);
 
+        // Terrain generation bounds (for layered planet generation)
+        this.terrainMinHeight = config.terrainMinHeight !== undefined ? config.terrainMinHeight : -15;
+        this.terrainMaxHeight = config.terrainMaxHeight !== undefined ? config.terrainMaxHeight : 50;
+        this.waterLevel = config.waterLevel !== undefined ? config.waterLevel : 100;
+
         this.onConfigChanged = null;
     }
 
@@ -254,7 +259,10 @@ export class BiomeConfiguration {
             distribution: this.distribution,
             globalStructureSettings: this.globalStructureSettings,
             biomeSpecificSettings: this.biomeSpecificSettings,
-            seed: this.seed
+            seed: this.seed,
+            terrainMinHeight: this.terrainMinHeight,
+            terrainMaxHeight: this.terrainMaxHeight,
+            waterLevel: this.waterLevel
         };
     }
 

@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ringworld Generator Test</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: monospace;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #0f0;
+            padding: 15px;
+            border: 2px solid #0f0;
+            font-size: 14px;
+            max-width: 400px;
+        }
+        #info h2 {
+            margin: 0 0 10px 0;
+            color: #0ff;
+        }
+        .stat {
+            margin: 5px 0;
+        }
+        .label {
+            color: #0f0;
+            display: inline-block;
+            width: 180px;
+        }
+        .value {
+            color: #ff0;
+            font-weight: bold;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #0f0;
+            padding: 15px;
+            border: 2px solid #0f0;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>Ringworld Generator Test</h2>
+        <div class="stat"><span class="label">Ring Radius:</span> <span class="value" id="ring-radius">0</span></div>
+        <div class="stat"><span class="label">Tube Radius:</span> <span class="value" id="tube-radius">0</span></div>
+        <div class="stat"><span class="label">Chunks Generated:</span> <span class="value" id="chunk-count">0</span></div>
+        <div class="stat"><span class="label">Player Position:</span> <span class="value" id="player-pos">0, 0, 0</span></div>
+        <div class="stat"><span class="label">Surface Distance:</span> <span class="value" id="surface-dist">0.0</span></div>
+        <div class="stat"><span class="label">Grounded:</span> <span class="value" id="grounded">No</span></div>
+        <div class="stat"><span class="label">FPS:</span> <span class="value" id="fps">60</span></div>
+    </div>
+
+    <div id="controls">
+        <strong>Controls:</strong><br>
+        WASD - Move<br>
+        Space - Jump<br>
+        R - Sprint<br>
+        Mouse - Look Around<br>
+        ESC - Release Mouse<br>
+        <br>
+        <strong>View:</strong><br>
+        1 - Toggle Wireframe<br>
+        2 - Toggle Chunk Bending
+    </div>
+
+    <script type="module">
+        /**
+         * RINGWORLD GENERATOR TEST
+         *
+         * Demonstrates the RingworldGenerator class integrated with:
+         * - Shader-based torus surface bending
+         * - Quaternion camera system
+         * - Toroidal gravity and physics
+         * - Layer-based terrain generation
+         */
+
+        import * as THREE from './src/lib/three.module.js';
+        import { RingworldGenerator } from './src/generation/generators/RingworldGenerator.js';
+        import { Chunk } from './src/spatial/Chunk.js';
+
+        // ===================================================================
+        // SCENE SETUP
+        // ===================================================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000011);
+        scene.fog = new THREE.Fog(0x000011, 500, 2000);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 5000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 2);
+        sunLight.position.set(500, 500, 500);
+        scene.add(sunLight);
+
+        // ===================================================================
+        // RINGWORLD GENERATOR INITIALIZATION
+        // ===================================================================
+
+        const ringworldConfig = {
+            ringRadius: 400,     // Major radius
+            tubeRadius: 80,      // Minor radius
+            chunkSize: 16,
+            surfaceDepth: 3      // 3 voxels of surface terrain
+        };
+
+        const generator = new RingworldGenerator(ringworldConfig);
+
+        // Update UI with generator parameters
+        document.getElementById('ring-radius').textContent = generator.ringRadius;
+        document.getElementById('tube-radius').textContent = generator.tubeRadius;
+
+        // ===================================================================
+        // LOAD SHADERS
+        // ===================================================================
+
+        let vertexShaderSource = '';
+        let fragmentShaderSource = '';
+
+        const vertexShaderPromise = fetch('./src/rendering/shaders/curved-surface-voxel.vert.glsl').then(r => r.text());
+        const fragmentShaderPromise = fetch('./src/rendering/shaders/curved-surface-voxel.frag.glsl').then(r => r.text());
+
+        Promise.all([vertexShaderPromise, fragmentShaderPromise]).then(([vert, frag]) => {
+            vertexShaderSource = vert;
+            fragmentShaderSource = frag;
+            init();
+        });
+
+        // ===================================================================
+        // INITIALIZATION
+        // ===================================================================
+
+        function init() {
+            // Add wireframe torus for reference
+            const torusGeometry = new THREE.TorusGeometry(generator.ringRadius, generator.tubeRadius, 32, 64);
+            const torusMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00ff00,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.15
+            });
+            window.torusWireframe = new THREE.Mesh(torusGeometry, torusMaterial);
+            window.torusWireframe.rotation.x = Math.PI / 2;
+            scene.add(window.torusWireframe);
+
+            // Generate all ringworld chunks
+            console.time('Chunk Generation');
+            const chunks = generator.generateAllChunks();
+            console.timeEnd('Chunk Generation');
+
+            document.getElementById('chunk-count').textContent = chunks.size;
+
+            // Create meshes from generated chunks
+            window.chunkGroup = new THREE.Group();
+            scene.add(window.chunkGroup);
+
+            chunks.forEach((chunkData, key) => {
+                const { chunk, u, v, layer } = chunkData;
+
+                // Generate mesh geometry from voxel data
+                const meshData = chunk.buildMesh(() => 0);
+
+                if (meshData && meshData.vertices && meshData.vertices.length > 0) {
+                    const geometry = new THREE.BufferGeometry();
+                    geometry.setAttribute('position', new THREE.BufferAttribute(meshData.vertices, 3));
+                    geometry.setAttribute('normal', new THREE.BufferAttribute(meshData.normals, 3));
+                    geometry.setAttribute('color', new THREE.BufferAttribute(meshData.colors, 3));
+
+                    // Get shader uniforms from generator
+                    const uniforms = generator.getShaderUniforms(window.playerPos);
+
+                    const material = new THREE.ShaderMaterial({
+                        vertexShader: vertexShaderSource,
+                        fragmentShader: fragmentShaderSource,
+                        uniforms: uniforms,
+                        side: THREE.DoubleSide
+                    });
+
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.frustumCulled = false;
+
+                    // Position chunk in flat grid (shader bends to torus)
+                    const gridPos = generator.getChunkGridPosition(u, v, layer);
+                    mesh.position.set(gridPos.x, gridPos.y, gridPos.z);
+
+                    window.chunkGroup.add(mesh);
+                }
+            });
+
+            // Initialize player state
+            initPlayer();
+            initControls();
+            animate();
+        }
+
+        // ===================================================================
+        // PLAYER STATE AND PHYSICS CONSTANTS
+        // ===================================================================
+
+        // Physics tuning constants (from working curved_surface_test.html)
+        const GRAVITY_STRENGTH = 30;   // Acceleration toward centerline (units/s²) - reduced for floatier feel
+        const JUMP_VELOCITY = 25;      // Initial upward velocity when jumping (higher = floatier)
+        const MOVE_SPEED = 20;          // Walking speed (units/s)
+
+        window.playerPos = new THREE.Vector3(generator.ringRadius + generator.tubeRadius + 3, 0, 0);
+        window.velocity = new THREE.Vector3(0, 0, 0);
+        window.yaw = 0;
+        window.pitch = 0;
+        window.isGrounded = false;
+
+        const keys = {
+            w: false, s: false, a: false, d: false,
+            space: false, r: false
+        };
+
+        let showWireframe = true;
+        let enableBending = true;
+
+        function initPlayer() {
+            // Player starts on outer surface at theta=0, phi=0
+            const startTheta = 0;
+            const startPhi = 0;
+            const startR = generator.tubeRadius + generator.surfaceDepth;
+
+            window.playerPos.set(
+                (generator.ringRadius + startR * Math.cos(startPhi)) * Math.cos(startTheta),
+                startR * Math.sin(startPhi),
+                (generator.ringRadius + startR * Math.cos(startPhi)) * Math.sin(startTheta)
+            );
+        }
+
+        // ===================================================================
+        // CONTROLS
+        // ===================================================================
+
+        function initControls() {
+            document.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (key in keys) keys[key] = true;
+                if (key === '1') {
+                    showWireframe = !showWireframe;
+                    window.torusWireframe.visible = showWireframe;
+                }
+                if (key === '2') {
+                    enableBending = !enableBending;
+                    window.chunkGroup.children.forEach(mesh => {
+                        mesh.material.uniforms.uFarRadius.value = enableBending ? 1 : 999999;
+                    });
+                }
+                if (key === '3') initPlayer();  // Reset to surface
+            });
+
+            document.addEventListener('keyup', (e) => {
+                const key = e.key.toLowerCase();
+                if (key in keys) keys[key] = false;
+            });
+
+            renderer.domElement.addEventListener('click', () => {
+                renderer.domElement.requestPointerLock();
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === renderer.domElement) {
+                    document.addEventListener('mousemove', onMouseMove);
+                } else {
+                    document.removeEventListener('mousemove', onMouseMove);
+                }
+            });
+        }
+
+        function onMouseMove(e) {
+            // Update yaw (horizontal rotation) - no wrapping needed
+            window.yaw -= e.movementX * 0.002;
+
+            // Update pitch (vertical rotation) - mouse up = look up
+            window.pitch -= e.movementY * 0.002;
+
+            // Clamp pitch to prevent camera flipping upside down (~89 degrees)
+            const maxPitch = Math.PI / 2 - 0.1;
+            window.pitch = Math.max(-maxPitch, Math.min(maxPitch, window.pitch));
+        }
+
+        // ===================================================================
+        // PHYSICS AND CAMERA
+        // ===================================================================
+
+        /**
+         * Calculate the surface coordinate system as a quaternion rotation.
+         *
+         * This is the KEY to making curved surfaces feel natural. It creates a rotation
+         * that transforms the world so that:
+         * - The local "up" vector points along the world Y axis (0, 1, 0)
+         * - The ring tangent defines the "forward" direction (wrapping around the ring)
+         * - Everything is perfectly orthogonal (no drift or gimbal lock)
+         *
+         * @param {THREE.Vector3} pos - Position to calculate surface rotation for
+         * @returns {THREE.Quaternion} Rotation that aligns surface normal with world up
+         */
+        function getSurfaceRotation(pos) {
+            const theta = Math.atan2(pos.z, pos.x);
+            const centerlineX = generator.ringRadius * Math.cos(theta);
+            const centerlineZ = generator.ringRadius * Math.sin(theta);
+            const centerlinePoint = new THREE.Vector3(centerlineX, 0, centerlineZ);
+            const localUp = new THREE.Vector3().subVectors(pos, centerlinePoint).normalize();
+
+            // Calculate ring tangent (points along major ring circumference)
+            // This is perpendicular to the radial direction in the XZ plane
+            const ringTangent = new THREE.Vector3(-Math.sin(theta), 0, Math.cos(theta));
+
+            // Build orthonormal basis for surface coordinate system:
+            // - Y axis = localUp (away from centerline)
+            // - Z axis = -ringTangent (forward wraps around ring)
+            // - X axis = right (perpendicular to both)
+            const axisY = localUp;
+            const axisZ = ringTangent.clone().negate();
+            const axisX = new THREE.Vector3().crossVectors(axisY, axisZ).normalize();
+
+            // Recalculate Z to ensure perfect orthogonality (prevents drift)
+            axisZ.crossVectors(axisX, axisY).normalize();
+
+            // Convert basis vectors to rotation matrix, then to quaternion
+            const rotMatrix = new THREE.Matrix4().makeBasis(axisX, axisY, axisZ);
+            return new THREE.Quaternion().setFromRotationMatrix(rotMatrix);
+        }
+
+        /**
+         * Update player physics: gravity, movement, jumping, ground detection.
+         *
+         * CRITICAL: This runs BEFORE updateCamera() to prevent visual jitter.
+         *
+         * Movement system:
+         * - Uses surface rotation + yaw only (NOT pitch)
+         * - This prevents "walking into the ground" when looking down
+         * - Forward movement wraps around the ring
+         * - Strafe movement wraps around the tube
+         *
+         * @param {number} delta - Time elapsed since last frame (seconds)
+         */
+        function updatePhysics(delta) {
+            const upData = generator.getUpVector(window.playerPos.x, window.playerPos.y, window.playerPos.z);
+            const localUp = new THREE.Vector3(upData.x, upData.y, upData.z);
+            const distToSurface = generator.getDistanceFromSurface(window.playerPos.x, window.playerPos.y, window.playerPos.z);
+
+            // Ground detection: within 0.1 units of surface
+            // Once grounded, stay grounded unless jumping (prevents bouncing)
+            if (!window.isGrounded) {
+                window.isGrounded = distToSurface < 0.1;
+            }
+
+            // Apply gravity (pulls toward centerline, opposite of local up)
+            if (!window.isGrounded) {
+                window.velocity.addScaledVector(localUp, -GRAVITY_STRENGTH * delta);
+            } else {
+                // When grounded: cancel downward velocity, apply friction, and snap to surface
+                const velocityAlongUp = window.velocity.dot(localUp);
+                if (velocityAlongUp < 0) {
+                    // Remove downward component of velocity
+                    window.velocity.addScaledVector(localUp, -velocityAlongUp);
+                }
+
+                // Apply friction to all velocity when grounded (stops sliding)
+                window.velocity.multiplyScalar(0.85);
+
+                if (distToSurface < 0) {
+                    // If sunk below surface, push back up
+                    window.playerPos.addScaledVector(localUp, -distToSurface);
+                }
+            }
+
+            // Jump: add upward velocity and unground player
+            if (keys.space && window.isGrounded) {
+                window.velocity.addScaledVector(localUp, JUMP_VELOCITY);
+                window.isGrounded = false;  // Allow becoming airborne
+            }
+
+            // WASD Movement (surface-relative, decoupled from pitch)
+            // Get surface rotation (aligns terrain with world Y)
+            const surfaceRot = getSurfaceRotation(window.playerPos);
+
+            // Create yaw-only rotation (no pitch applied to movement)
+            // This prevents walking into ground when looking down
+            const moveRot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), window.yaw);
+
+            // Combine surface and yaw rotations
+            const combinedRot = surfaceRot.clone().multiply(moveRot);
+
+            // Calculate forward and right vectors in surface-aligned space
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(combinedRot);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(combinedRot);
+
+            // Apply WASD movement (with sprint modifier)
+            const sprintMultiplier = keys.r ? 2.0 : 1.0;  // 2x speed when sprinting
+            const moveSpeed = MOVE_SPEED * delta * sprintMultiplier;
+            if (keys.w) window.playerPos.addScaledVector(forward, moveSpeed);   // Forward
+            if (keys.s) window.playerPos.addScaledVector(forward, -moveSpeed);  // Backward
+            if (keys.a) window.playerPos.addScaledVector(right, -moveSpeed);    // Strafe left
+            if (keys.d) window.playerPos.addScaledVector(right, moveSpeed);     // Strafe right
+
+            // Apply accumulated velocity (gravity, jumping, etc.)
+            window.playerPos.add(window.velocity.clone().multiplyScalar(delta));
+
+            // Update UI
+            document.getElementById('player-pos').textContent =
+                `${window.playerPos.x.toFixed(1)}, ${window.playerPos.y.toFixed(1)}, ${window.playerPos.z.toFixed(1)}`;
+            document.getElementById('surface-dist').textContent = distToSurface.toFixed(2);
+            document.getElementById('grounded').textContent = window.isGrounded ? 'Yes' : 'No';
+        }
+
+        /**
+         * Update camera position and orientation based on player state.
+         *
+         * QUATERNION-BASED APPROACH (prevents drift and gimbal lock):
+         * 1. Calculate surface rotation: aligns local up with world Y
+         * 2. Calculate look rotation: player's yaw and pitch inputs
+         * 3. Multiply rotations: surfaceRot * lookRot
+         *
+         * This ensures:
+         * - Terrain always appears flat/horizontal on screen
+         * - No camera rolling or drifting
+         * - Stable, FPS-like controls regardless of surface curvature
+         */
+        function updateCamera() {
+            const upData = generator.getUpVector(window.playerPos.x, window.playerPos.y, window.playerPos.z);
+            const localUp = new THREE.Vector3(upData.x, upData.y, upData.z);
+
+            // Position camera at eye height (1.6 units) above player along local up vector
+            camera.position.copy(window.playerPos).addScaledVector(localUp, 1.6);
+
+            // Calculate surface-aligned rotation (makes terrain appear flat)
+            const surfaceRot = getSurfaceRotation(window.playerPos);
+
+            // Calculate look rotation from yaw/pitch (player's view direction)
+            // Order YXZ is crucial: yaw (Y) first, then pitch (X), no roll (Z)
+            const lookRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(window.pitch, window.yaw, 0, 'YXZ'));
+
+            // Combine rotations: apply surface alignment, THEN look direction
+            // This is the key - layering look on top of surface keeps terrain flat
+            camera.quaternion.multiplyQuaternions(surfaceRot, lookRot);
+        }
+
+        // ===================================================================
+        // ANIMATION LOOP
+        // ===================================================================
+
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fpsTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const currentTime = performance.now();
+            const delta = Math.min((currentTime - lastTime) / 1000, 0.1);
+            lastTime = currentTime;
+
+            updatePhysics(delta);
+            updateCamera();
+
+            // Update shader uniforms
+            window.chunkGroup.children.forEach(mesh => {
+                mesh.material.uniforms.uPlayerPos.value = window.playerPos;
+            });
+
+            renderer.render(scene, camera);
+
+            // FPS counter
+            frameCount++;
+            fpsTime += delta;
+            if (fpsTime >= 1.0) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                fpsTime = 0;
+            }
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

@@ -1,16 +1,35 @@
 {
   "name": "polymir-backend",
   "version": "1.0.0-alpha",
-  "description": "Polymir Cloudflare Workers Backend",
+  "description": "Polymir P2P Voxel MMO Backend - Dual Database + IPFS + libp2p",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "dev": "node src/server.js",
+    "migrate:central": "psql $CENTRAL_DB_URL -f migrations/001_central_library_schema.sql",
+    "migrate:world": "psql $WORLD_DB_URL -f migrations/002_world_server_schema.sql",
+    "migrate": "npm run migrate:central && npm run migrate:world",
+    "start": "node src/server.js",
+    "test": "node --test"
   },
-  "dependencies": {},
-  "devDependencies": {
-    "wrangler": "^3.0.0"
+  "dependencies": {
+    "pg": "^8.11.3",
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "ipfs-http-client": "^60.0.1",
+    "libp2p": "^0.46.13",
+    "@libp2p/websockets": "^7.0.7",
+    "@libp2p/tcp": "^8.0.7",
+    "@libp2p/mplex": "^9.0.7",
+    "@libp2p/noise": "^12.0.5",
+    "@libp2p/kad-dht": "^10.0.7",
+    "@libp2p/gossipsub": "^9.1.0",
+    "@libp2p/bootstrap": "^8.0.7",
+    "cors": "^2.8.5",
+    "bcrypt": "^5.1.1",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.3.1"
   },
+  "devDependencies": {},
   "engines": {
     "node": ">=18.0.0"
   }

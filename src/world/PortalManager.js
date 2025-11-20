@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../lib/three.module.js';
 
 export class PortalManager {
     constructor(scene, renderer, chunkManager) {
@@ -192,13 +192,35 @@ export class PortalManager {
             console.log(`🌀 Extended portal #${existingPortal.id} (${existingPortal.blocks.length} blocks)`);
         } else {
             // New portal structure
-            const cardinalNormal = this.normalizeToCardinal(placementNormal);
-            const cardinalYaw = Math.round(placementRotation.yaw / (Math.PI / 2)) * (Math.PI / 2);
+            let cardinalNormal = this.normalizeToCardinal(placementNormal);
+
+            // FIX #2: Validate normal direction - should point toward empty space
+            const frontVoxel = this.getVoxelAt(
+                worldX + cardinalNormal.x,
+                worldY + cardinalNormal.y,
+                worldZ + cardinalNormal.z
+            );
+            const backVoxel = this.getVoxelAt(
+                worldX - cardinalNormal.x,
+                worldY - cardinalNormal.y,
+                worldZ - cardinalNormal.z
+            );
+
+            // If front is solid and back is empty, we're facing the wrong way - flip it
+            if (frontVoxel !== 0 && backVoxel === 0) {
+                cardinalNormal = {
+                    x: -cardinalNormal.x,
+                    y: -cardinalNormal.y,
+                    z: -cardinalNormal.z
+                };
+                console.log(`   🔄 Flipped normal to point toward empty space: [${cardinalNormal.x}, ${cardinalNormal.y}, ${cardinalNormal.z}]`);
+            }
 
             const blocks = this.detectPortalStructure(worldX, worldY, worldZ);
+            // NOTE: placementRotation is now IGNORED for orientation - only normal is used
             const schematic = this.createPortalSchematic(blocks, cardinalNormal, {
-                yaw: cardinalYaw,
-                pitch: placementRotation.pitch
+                yaw: 0,
+                pitch: 0
             });
 
             const newPortal = {
@@ -381,16 +403,35 @@ export class PortalManager {
         ) + 1;
         const height = Math.abs(bounds.max.y - bounds.min.y) + 1;
 
-        // Build orthonormal basis (right, up, forward) for portal transform
+        // FIX #1: Build deterministic orthonormal basis - ONLY uses normal, not player rotation
+        // This makes portals behave like Portal 2 - consistent orientation based on surface type
         const worldUp = new THREE.Vector3(0, 1, 0);
-        const worldRight = new THREE.Vector3(1, 0, 0);
+        const worldForward = new THREE.Vector3(0, 0, 1);
 
-        // Right vector: rotate world right by placement yaw, project onto portal plane
-        const rightBase = worldRight.clone().applyAxisAngle(worldUp, portal.schematic.placementRotation.yaw);
-        const right = rightBase.clone().sub(normal.clone().multiplyScalar(rightBase.dot(normal))).normalize();
+        let up, right;
 
-        // Up vector: cross product to ensure orthonormal basis
-        const up = new THREE.Vector3().crossVectors(right, normal).normalize();
+        // Determine portal "up" direction based on surface type
+        if (Math.abs(normal.y) > 0.99) {
+            // HORIZONTAL SURFACE (floor or ceiling)
+            // Use world Z as the portal's "up" direction
+            up = worldForward.clone();
+            // If ceiling (normal points down), reverse the up direction
+            if (normal.y < 0) {
+                up.negate();
+            }
+        } else {
+            // VERTICAL SURFACE (wall)
+            // Use world Y (sky direction) as base for portal's "up"
+            up = worldUp.clone();
+            // Project onto portal plane to make it perpendicular to normal
+            up.sub(normal.clone().multiplyScalar(up.dot(normal))).normalize();
+        }
+
+        // Right vector: perpendicular to both up and normal
+        right = new THREE.Vector3().crossVectors(up, normal).normalize();
+
+        // Recalculate up to ensure perfect orthonormal basis (fixes any floating point errors)
+        up = new THREE.Vector3().crossVectors(normal, right).normalize();
 
         // Forward points INTO portal surface (for correct crossing detection)
         const forward = normal.clone().negate();

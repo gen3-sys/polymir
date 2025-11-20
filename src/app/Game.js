@@ -19,6 +19,7 @@ import { MVoxLoader } from '../data/mvox/MVoxLoader.js';
 import { GeometryBufferPool } from '../memory/GeometryBufferPool.js';
 import { BiomeConfiguration } from '../config/BiomeConfiguration.js';
 import globalBiomeEventBus, { BIOME_EVENTS } from '../systems/BiomeConfigEventBus.js';
+import { VoxelCollisionSystem } from '../systems/VoxelCollisionSystem.js';
 
 export class Game {
     constructor(canvas) {
@@ -46,6 +47,9 @@ export class Game {
 
         this.cachedPlanetPos = new THREE.Vector3();
         this.cachedStarPos = new THREE.Vector3();
+
+        // Initialize collision system (single source of truth: rendered meshes = collision meshes)
+        this.voxelCollisionSystem = new VoxelCollisionSystem(this.planetRadius, this.chunkSize);
 
         this.setupRenderer();
         this.setupOrbitalSystem();
@@ -459,6 +463,9 @@ export class Game {
                     this.planetContainer.add(mesh);
                     this.loadedMeshes.set(key, mesh);
                     this.chunkTextureManager.update(cx, cy, cz, true);
+
+                    // Register mesh for collision (single source of truth)
+                    this.voxelCollisionSystem.registerCollisionMesh(cx, cy, cz, mesh);
                 }
             }).catch(() => {
                 const chunk = new Chunk(cx, cy, cz, this.chunkSize);
@@ -478,6 +485,9 @@ export class Game {
                     this.planetContainer.add(mesh);
                     this.loadedMeshes.set(key, mesh);
                     this.chunkTextureManager.update(cx, cy, cz, true);
+
+                    // Register mesh for collision (single source of truth)
+                    this.voxelCollisionSystem.registerCollisionMesh(cx, cy, cz, mesh);
                 }
             });
         }
@@ -490,6 +500,11 @@ export class Game {
         for (const key of unloaded) {
             const mesh = this.loadedMeshes.get(key);
             if (mesh) {
+                const { cx, cy, cz } = ChunkCoordinate.fromKey(key);
+
+                // Unregister from collision system first
+                this.voxelCollisionSystem.unregisterCollisionMesh(cx, cy, cz);
+
                 this.planetContainer.remove(mesh);
                 MeshFactory.disposeMesh(mesh);
                 this.loadedMeshes.delete(key);
@@ -500,7 +515,6 @@ export class Game {
                     this.chunkBuffers.delete(key);
                 }
 
-                const { cx, cy, cz } = ChunkCoordinate.fromKey(key);
                 this.chunkTextureManager.update(cx, cy, cz, false);
             }
         }
@@ -550,6 +564,17 @@ export class Game {
             if (document.getElementById('pool-buffers')) {
                 document.getElementById('pool-buffers').textContent =
                     `${poolStats.inUseBuffers}/${poolStats.availableBuffers + poolStats.inUseBuffers}`;
+            }
+
+            // Update collision stats if available
+            if (this.voxelCollisionSystem) {
+                const collisionStats = this.voxelCollisionSystem.getStats();
+                if (document.getElementById('collision-meshes')) {
+                    document.getElementById('collision-meshes').textContent = collisionStats.registry.totalMeshes;
+                }
+                if (document.getElementById('collision-hitrate')) {
+                    document.getElementById('collision-hitrate').textContent = collisionStats.collision.hitRate;
+                }
             }
         }
     }
@@ -828,9 +853,90 @@ export class Game {
         console.log('Game biome configuration updated');
     }
 
+    /**
+     * Test collision system - verify that rendered meshes work as collision surfaces
+     * Call this from console: game.testCollision()
+     */
+    async testCollision() {
+        const { CollisionVerifier } = await import('../systems/CollisionVerifier.js');
+
+        if (!this.voxelCollisionSystem) {
+            console.error('VoxelCollisionSystem not initialized');
+            return;
+        }
+
+        if (!this.mainPlanet || !this.mainPlanet.mesh) {
+            console.error('Main planet not loaded');
+            return;
+        }
+
+        const verifier = new CollisionVerifier(this.voxelCollisionSystem);
+        const results = verifier.runTests(
+            this.camera.position,
+            this.mainPlanet.mesh.position
+        );
+
+        // Optionally create debug visualization
+        if (window.confirm('Show debug visualization in scene?')) {
+            const helpers = verifier.createDebugVisualization(
+                this.scene,
+                this.camera.position,
+                this.mainPlanet.mesh.position
+            );
+
+            console.log('Debug visualization added to scene');
+            console.log('To remove: game.removeDebugHelpers()');
+
+            this.debugHelpers = helpers;
+        }
+
+        return results;
+    }
+
+    /**
+     * Remove debug visualization helpers
+     */
+    removeDebugHelpers() {
+        if (this.debugHelpers) {
+            for (const helper of this.debugHelpers) {
+                this.scene.remove(helper);
+                if (helper.geometry) helper.geometry.dispose();
+                if (helper.material) helper.material.dispose();
+            }
+            this.debugHelpers = null;
+            console.log('Debug helpers removed');
+        }
+    }
+
+    /**
+     * Get collision system statistics
+     */
+    getCollisionStats() {
+        if (!this.voxelCollisionSystem) {
+            return null;
+        }
+
+        const stats = this.voxelCollisionSystem.getStats();
+        const registry = this.voxelCollisionSystem.getRegistry();
+
+        return {
+            ...stats,
+            meshKeys: registry.getAllKeys(),
+            totalRegisteredMeshes: registry.getAllKeys().length
+        };
+    }
+
     dispose() {
         if (this.biomeEventUnsubscribe) {
             this.biomeEventUnsubscribe();
         }
+
+        // Clean up collision system
+        if (this.voxelCollisionSystem) {
+            this.voxelCollisionSystem.clear();
+        }
+
+        // Clean up debug helpers
+        this.removeDebugHelpers();
     }
 }

@@ -11,6 +11,28 @@ export const VOXEL_TYPES = {
         hardness: 0
     },
 
+    CORE_BRIGHT: {
+        id: 1,
+        name: 'Bright Core',
+        color: 0xFFFF00,
+        semantics: SEMANTIC.SOLID | SEMANTIC.EMISSIVE,
+        description: 'Planet inner core (bright emissive)',
+        hardness: 255,
+        luminance: 15,
+        soundType: 'metal'
+    },
+
+    CORE_MEDIUM: {
+        id: 2,
+        name: 'Medium Core',
+        color: 0xFF6600,
+        semantics: SEMANTIC.SOLID | SEMANTIC.EMISSIVE,
+        description: 'Planet outer core (medium emissive)',
+        hardness: 255,
+        luminance: 10,
+        soundType: 'metal'
+    },
+
     GRASS: {
         id: 10,
         name: 'Grass',
