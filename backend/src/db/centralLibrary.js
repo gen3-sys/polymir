@@ -5,7 +5,7 @@
  * Handles: players, schematics, trust scores, validation consensus, server registry
  */
 
-import { logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 
 // =============================================
 // CENTRAL LIBRARY DATABASE ADAPTER
@@ -141,10 +141,18 @@ export class CentralLibraryDB {
                 file_cid, thumbnail_cid,
                 size_x, size_y, size_z, voxel_count,
                 category, tags, biomes,
-                is_planet, spawn_frequency
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                gravity_vector_x, gravity_vector_y, gravity_vector_z,
+                anchor_point_x, anchor_point_y, anchor_point_z,
+                is_planet, spawn_frequency,
+                is_composite, component_count
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             RETURNING schematic_id, created_at
         `;
+
+        // Default gravity vector: Y-down [0, -1, 0]
+        const gravityVector = schematic.gravityVector || [0, -1, 0];
+        // Default anchor point: center-bottom [0.5, 0, 0.5]
+        const anchorPoint = schematic.anchorPoint || [0.5, 0, 0.5];
 
         const result = await this.pool.query(query, [
             schematic.creatorId,
@@ -159,8 +167,16 @@ export class CentralLibraryDB {
             schematic.category,
             schematic.tags || [],
             schematic.biomes || [],
+            gravityVector[0],
+            gravityVector[1],
+            gravityVector[2],
+            anchorPoint[0],
+            anchorPoint[1],
+            anchorPoint[2],
             schematic.isPlanet || false,
-            schematic.spawnFrequency || 0.0
+            schematic.spawnFrequency || 0.0,
+            schematic.isComposite || false,
+            schematic.componentCount || 0
         ]);
 
         this.log.info('Schematic created', {
@@ -589,6 +605,188 @@ export class CentralLibraryDB {
 
         const result = await this.pool.query(query, [playerId, limit]);
         return result.rows;
+    }
+
+    // =============================================
+    // SCHEMATIC REFERENCES (Composite Builds)
+    // =============================================
+
+    /**
+     * Add a component schematic reference to a composite build
+     * @param {Object} reference
+     * @returns {Promise<Object>}
+     */
+    async addSchematicReference(reference) {
+        const query = `
+            INSERT INTO schematic_references (
+                parent_schematic_id, child_schematic_id,
+                offset_x, offset_y, offset_z,
+                rotation_x, rotation_y, rotation_z, rotation_w,
+                layer_id, layer_scale_ratio, sort_order
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING reference_id, added_at
+        `;
+
+        const result = await this.pool.query(query, [
+            reference.parentSchematicId,
+            reference.childSchematicId,
+            reference.offsetX || 0,
+            reference.offsetY || 0,
+            reference.offsetZ || 0,
+            reference.rotationX || 0,
+            reference.rotationY || 0,
+            reference.rotationZ || 0,
+            reference.rotationW || 1,
+            reference.layerId || 0,
+            reference.layerScaleRatio || 1.0,
+            reference.sortOrder || 0
+        ]);
+
+        // Update parent's composite status
+        await this.updateSchematicCompositeStatus(reference.parentSchematicId);
+
+        this.log.info('Schematic reference added', {
+            parentId: reference.parentSchematicId,
+            childId: reference.childSchematicId
+        });
+
+        return result.rows[0];
+    }
+
+    /**
+     * Get all component schematics of a composite build
+     * @param {string} parentSchematicId
+     * @returns {Promise<Array>}
+     */
+    async getSchematicComponents(parentSchematicId) {
+        const query = `
+            SELECT
+                sr.*,
+                s.name as child_name,
+                s.file_cid as child_file_cid,
+                s.thumbnail_cid as child_thumbnail_cid,
+                s.size_x as child_size_x,
+                s.size_y as child_size_y,
+                s.size_z as child_size_z,
+                s.is_composite as child_is_composite
+            FROM schematic_references sr
+            JOIN schematics s ON sr.child_schematic_id = s.schematic_id
+            WHERE sr.parent_schematic_id = $1
+            ORDER BY sr.sort_order ASC, sr.added_at ASC
+        `;
+
+        const result = await this.pool.query(query, [parentSchematicId]);
+        return result.rows;
+    }
+
+    /**
+     * Remove a component from a composite build
+     * @param {string} referenceId
+     * @returns {Promise<boolean>}
+     */
+    async removeSchematicReference(referenceId) {
+        // Get parent ID before deleting
+        const getQuery = `SELECT parent_schematic_id FROM schematic_references WHERE reference_id = $1`;
+        const getResult = await this.pool.query(getQuery, [referenceId]);
+
+        if (getResult.rows.length === 0) return false;
+
+        const parentId = getResult.rows[0].parent_schematic_id;
+
+        const deleteQuery = `DELETE FROM schematic_references WHERE reference_id = $1`;
+        await this.pool.query(deleteQuery, [referenceId]);
+
+        // Update parent's composite status
+        await this.updateSchematicCompositeStatus(parentId);
+
+        this.log.info('Schematic reference removed', { referenceId, parentId });
+        return true;
+    }
+
+    /**
+     * Update a schematic's composite status and component count
+     * @param {string} schematicId
+     * @returns {Promise<void>}
+     */
+    async updateSchematicCompositeStatus(schematicId) {
+        const query = `
+            UPDATE schematics
+            SET is_composite = (
+                SELECT COUNT(*) > 0
+                FROM schematic_references
+                WHERE parent_schematic_id = $1
+            ),
+            component_count = (
+                SELECT COUNT(*)
+                FROM schematic_references
+                WHERE parent_schematic_id = $1
+            )
+            WHERE schematic_id = $1
+        `;
+
+        await this.pool.query(query, [schematicId]);
+    }
+
+    /**
+     * Get all builds that use a specific schematic as a component
+     * @param {string} schematicId
+     * @returns {Promise<Array>}
+     */
+    async getBuildsUsingSchematic(schematicId) {
+        const query = `
+            SELECT
+                s.*,
+                sr.offset_x, sr.offset_y, sr.offset_z,
+                sr.layer_id
+            FROM schematic_references sr
+            JOIN schematics s ON sr.parent_schematic_id = s.schematic_id
+            WHERE sr.child_schematic_id = $1
+            ORDER BY s.created_at DESC
+        `;
+
+        const result = await this.pool.query(query, [schematicId]);
+        return result.rows;
+    }
+
+    /**
+     * Create a composite build from existing schematics
+     * @param {Object} buildData - Build metadata
+     * @param {Array} components - Array of component references
+     * @returns {Promise<Object>}
+     */
+    async createCompositeBuild(buildData, components) {
+        // Create the parent schematic first
+        const schematic = await this.createSchematic({
+            ...buildData,
+            isComposite: true
+        });
+
+        // Add all component references
+        for (let i = 0; i < components.length; i++) {
+            const comp = components[i];
+            await this.addSchematicReference({
+                parentSchematicId: schematic.schematic_id,
+                childSchematicId: comp.schematicId,
+                offsetX: comp.offset?.[0] || 0,
+                offsetY: comp.offset?.[1] || 0,
+                offsetZ: comp.offset?.[2] || 0,
+                rotationX: comp.rotation?.[0] || 0,
+                rotationY: comp.rotation?.[1] || 0,
+                rotationZ: comp.rotation?.[2] || 0,
+                rotationW: comp.rotation?.[3] || 1,
+                layerId: comp.layerId || 0,
+                layerScaleRatio: comp.layerScaleRatio || 1.0,
+                sortOrder: i
+            });
+        }
+
+        this.log.info('Composite build created', {
+            schematicId: schematic.schematic_id,
+            name: buildData.name,
+            componentCount: components.length
+        });
+
+        return schematic;
     }
 }
 

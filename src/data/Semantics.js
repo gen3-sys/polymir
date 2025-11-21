@@ -33,6 +33,22 @@ export const SEMANTIC = {
     EVAPORATING: 0x80000000
 };
 
+/**
+ * Extended block categories (beyond 32-bit semantics)
+ * These identify special functional blocks
+ */
+export const BLOCK_FUNCTION = {
+    NONE: 0,
+    INTERACTIVE: 1,       // Can be interacted with (buttons, levers)
+    CONTROL_PANEL: 2,     // Ship control panel - designates build as ship
+    THRUSTER: 3,          // Ship thruster - provides thrust
+    SEAT: 4,              // Seat - player can sit/board
+    STORAGE: 5,           // Storage container
+    CRAFTING: 6,          // Crafting station
+    PORTAL_FRAME: 7,      // Portal frame block
+    DANGEROUS: 8          // Causes damage on contact
+};
+
 export function hasFlag(voxel, flag) {
     if (!voxel || voxel.semantics === undefined) {
         return false;
@@ -173,6 +189,7 @@ export function semanticsToHex(voxel) {
 export default {
     SEMANTIC,
     SEMANTIC_PRESETS,
+    BLOCK_FUNCTION,
     hasFlag,
     setFlag,
     clearFlag,

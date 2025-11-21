@@ -11,12 +11,20 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis"; -- For spatial queries
 
 -- =============================================
+-- CUSTOM TYPES (must be defined before tables that use them)
+-- =============================================
+
+-- Build mode: player's intent when placing blocks (3-position slider)
+CREATE TYPE build_mode AS ENUM ('new_schematic', 'extend_build', 'raw_damage');
+
+-- Change type: what kind of voxel modification
+CREATE TYPE change_type AS ENUM ('add', 'remove');
+
+-- =============================================
 -- MEGACHUNKS (Top-level spatial organization)
 -- =============================================
 -- Each megachunk = 256×256×256 voxels = 16×16×16 chunks
--- Megach
-
-unks form the top-level spatial grid
+-- Megachunks form the top-level spatial grid
 
 CREATE TABLE megachunks (
     megachunk_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -90,9 +98,19 @@ CREATE TABLE celestial_bodies (
     mass REAL NOT NULL CHECK (mass > 0),
     gravity_multiplier REAL NOT NULL DEFAULT 1.0,
 
-    -- State
+    -- Gravitational center (for schematic placement positioning)
+    -- Placements are relative to this point
+    gravitational_center_x REAL NOT NULL DEFAULT 0,
+    gravitational_center_y REAL NOT NULL DEFAULT 0,
+    gravitational_center_z REAL NOT NULL DEFAULT 0,
+
+    -- Fracture metadata (matches MVoxFile fracture tracking)
     is_fractured BOOLEAN NOT NULL DEFAULT false,
     parent_body_id UUID REFERENCES celestial_bodies(body_id) ON DELETE SET NULL,
+    original_body_id UUID REFERENCES celestial_bodies(body_id) ON DELETE SET NULL, -- Root body before any shattering
+    shatter_generation INTEGER NOT NULL DEFAULT 0, -- Split depth (0 = original, 1+ = fragments)
+    parent_fragment_id INTEGER, -- Which Voronoi fragment of parent this came from
+    fracture_pattern JSONB, -- Pre-computed Voronoi centers for deterministic shattering
 
     -- Timestamps
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -103,6 +121,8 @@ CREATE INDEX idx_bodies_megachunk ON celestial_bodies(megachunk_id);
 CREATE INDEX idx_bodies_type ON celestial_bodies(body_type);
 CREATE INDEX idx_bodies_position ON celestial_bodies(local_x, local_y, local_z);
 CREATE INDEX idx_bodies_parent ON celestial_bodies(parent_body_id);
+CREATE INDEX idx_bodies_original ON celestial_bodies(original_body_id); -- Find all fragments from original body
+CREATE INDEX idx_bodies_shatter_gen ON celestial_bodies(shatter_generation); -- Query by fracture depth
 
 -- =============================================
 -- PLAYER POSITIONS (Current world state)
@@ -138,6 +158,15 @@ CREATE TABLE player_positions (
     -- Interest management (which regions player is subscribed to)
     subscribed_megachunks INTEGER[] DEFAULT ARRAY[]::INTEGER[],
     subscribed_bodies UUID[] DEFAULT ARRAY[]::UUID[],
+
+    -- Build mode (3-position slider)
+    -- 'new_schematic': blocks form new schematics when clustered
+    -- 'extend_build': blocks attach to nearest existing schematic placement
+    -- 'raw_damage': direct damage map edits, no build detection (terrain editing)
+    current_build_mode build_mode NOT NULL DEFAULT 'new_schematic',
+
+    -- If in 'extend_build' mode, which schematic are we extending?
+    extending_placement_id UUID REFERENCES schematic_placements(placement_id) ON DELETE SET NULL,
 
     -- Timestamps
     last_position_update TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -189,6 +218,92 @@ CREATE INDEX idx_chunk_modifications_player ON chunk_modifications(modified_by);
 CREATE INDEX idx_chunk_modifications_timestamp ON chunk_modifications(modified_at DESC);
 
 -- =============================================
+-- DAMAGE MAP (Individual voxel changes with attribution)
+-- =============================================
+-- Tracks individual block additions/removals before they become schematics
+-- Used for: build detection, attribution tracking, undo history
+-- Base terrain is NEVER modified - only this overlay
+
+CREATE TABLE damage_map (
+    damage_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Location (voxel-level precision)
+    body_id UUID NOT NULL REFERENCES celestial_bodies(body_id) ON DELETE CASCADE,
+    voxel_x INTEGER NOT NULL,
+    voxel_y INTEGER NOT NULL,
+    voxel_z INTEGER NOT NULL,
+    layer_id INTEGER NOT NULL DEFAULT 0, -- Which scale layer
+
+    -- What changed
+    change_type change_type NOT NULL, -- 'add' or 'remove'
+    voxel_type INTEGER, -- Block type ID (null for removals)
+    voxel_color INTEGER, -- Packed RGB (null for removals)
+
+    -- Attribution: WHO did this
+    player_id UUID NOT NULL, -- Who made this change
+    trust_score_at_change REAL, -- Player's trust when change was made
+
+    -- Build mode: player's intent when making this change
+    build_mode build_mode NOT NULL DEFAULT 'new_schematic',
+
+    -- If build_mode = 'extend_build', which schematic are we extending?
+    attached_schematic_placement_id UUID REFERENCES schematic_placements(placement_id) ON DELETE SET NULL,
+
+    -- Build detection tracking
+    -- Once converted to a schematic, this links to it
+    converted_to_schematic_id UUID, -- Central Library schematic ID (after extraction)
+    converted_at TIMESTAMPTZ,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- One entry per voxel position per layer
+    UNIQUE(body_id, voxel_x, voxel_y, voxel_z, layer_id)
+);
+
+CREATE INDEX idx_damage_map_body ON damage_map(body_id);
+CREATE INDEX idx_damage_map_coords ON damage_map(body_id, voxel_x, voxel_y, voxel_z);
+CREATE INDEX idx_damage_map_player ON damage_map(player_id);
+CREATE INDEX idx_damage_map_build_mode ON damage_map(build_mode) WHERE build_mode != 'raw_damage';
+CREATE INDEX idx_damage_map_unconverted ON damage_map(body_id, build_mode) WHERE converted_to_schematic_id IS NULL;
+CREATE INDEX idx_damage_map_attached ON damage_map(attached_schematic_placement_id) WHERE attached_schematic_placement_id IS NOT NULL;
+
+-- =============================================
+-- DAMAGE MAP HISTORY (Undo support & audit trail)
+-- =============================================
+-- Every change to damage_map is logged here for undo and auditing
+
+CREATE TABLE damage_map_history (
+    history_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- Reference to the damage entry (may be deleted)
+    damage_id UUID, -- Can be null if entry was deleted
+    body_id UUID NOT NULL,
+    voxel_x INTEGER NOT NULL,
+    voxel_y INTEGER NOT NULL,
+    voxel_z INTEGER NOT NULL,
+    layer_id INTEGER NOT NULL DEFAULT 0,
+
+    -- What was the change
+    change_type change_type NOT NULL,
+    voxel_type INTEGER,
+    voxel_color INTEGER,
+
+    -- Who and when
+    player_id UUID NOT NULL,
+    build_mode build_mode NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Was this undone?
+    undone_at TIMESTAMPTZ,
+    undone_by UUID -- Player who undid this
+);
+
+CREATE INDEX idx_damage_history_body ON damage_map_history(body_id);
+CREATE INDEX idx_damage_history_player ON damage_map_history(player_id, created_at DESC);
+CREATE INDEX idx_damage_history_recent ON damage_map_history(body_id, created_at DESC);
+
+-- =============================================
 -- SCHEMATIC PLACEMENTS (Instances in world)
 -- =============================================
 
@@ -199,9 +314,15 @@ CREATE TABLE schematic_placements (
     schematic_id UUID NOT NULL, -- Foreign key to Central Library schematics table
     schematic_cid TEXT NOT NULL, -- IPFS CID (redundant but faster lookups)
 
+    -- Layer-based sparse storage
+    -- Each placement targets a specific layer (block/microblock scale)
+    -- Layer 0 = full blocks (1m³), Layer 1 = microblocks (1/16 scale), etc.
+    layer_id INTEGER NOT NULL DEFAULT 0 CHECK (layer_id >= 0),
+    layer_scale_ratio REAL NOT NULL DEFAULT 1.0 CHECK (layer_scale_ratio > 0), -- 1.0 = blocks, 0.0625 = microblocks (1/16)
+
     -- Where placed
     body_id UUID NOT NULL REFERENCES celestial_bodies(body_id) ON DELETE CASCADE,
-    position_x REAL NOT NULL,
+    position_x REAL NOT NULL, -- Position relative to body's gravitational center
     position_y REAL NOT NULL,
     position_z REAL NOT NULL,
 
@@ -227,6 +348,118 @@ CREATE INDEX idx_placements_body ON schematic_placements(body_id);
 CREATE INDEX idx_placements_schematic ON schematic_placements(schematic_id);
 CREATE INDEX idx_placements_player ON schematic_placements(placed_by);
 CREATE INDEX idx_placements_position ON schematic_placements(body_id, position_x, position_y, position_z);
+CREATE INDEX idx_placements_layer ON schematic_placements(body_id, layer_id); -- Query placements by layer for sparse loading
+
+-- =============================================
+-- SHIPS / VEHICLES (Player-controlled builds)
+-- =============================================
+-- Ships are schematic_placements that contain a CONTROL_PANEL block
+-- They can move independently through megachunks
+-- Players board ships and are anchored to the ship's planar gravity
+
+-- Ship state enum
+CREATE TYPE ship_state AS ENUM ('inactive', 'piloted', 'drifting', 'docked', 'destroyed');
+
+CREATE TABLE ships (
+    ship_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- The schematic placement this ship is derived from
+    schematic_placement_id UUID UNIQUE NOT NULL REFERENCES schematic_placements(placement_id) ON DELETE CASCADE,
+
+    -- Ship ownership
+    owner_id UUID NOT NULL, -- Player who built/owns the ship
+    name VARCHAR(255) NOT NULL DEFAULT 'Unnamed Ship',
+
+    -- Current state
+    state ship_state NOT NULL DEFAULT 'inactive',
+    pilot_id UUID, -- Player currently piloting (null if no pilot)
+
+    -- Current location (may be different from placement if ship has moved)
+    megachunk_id UUID REFERENCES megachunks(megachunk_id) ON DELETE SET NULL,
+    position_x REAL NOT NULL DEFAULT 0,
+    position_y REAL NOT NULL DEFAULT 0,
+    position_z REAL NOT NULL DEFAULT 0,
+
+    -- Velocity (for drifting ships)
+    velocity_x REAL NOT NULL DEFAULT 0,
+    velocity_y REAL NOT NULL DEFAULT 0,
+    velocity_z REAL NOT NULL DEFAULT 0,
+
+    -- Rotation (quaternion)
+    rotation_x REAL NOT NULL DEFAULT 0,
+    rotation_y REAL NOT NULL DEFAULT 0,
+    rotation_z REAL NOT NULL DEFAULT 0,
+    rotation_w REAL NOT NULL DEFAULT 1,
+
+    -- Angular velocity
+    angular_velocity_x REAL NOT NULL DEFAULT 0,
+    angular_velocity_y REAL NOT NULL DEFAULT 0,
+    angular_velocity_z REAL NOT NULL DEFAULT 0,
+
+    -- Computed ship properties (from block analysis)
+    mass REAL NOT NULL DEFAULT 100,
+    total_thrust REAL NOT NULL DEFAULT 0,
+    fuel_capacity REAL NOT NULL DEFAULT 0,
+    current_fuel REAL NOT NULL DEFAULT 0,
+    gyroscope_strength REAL NOT NULL DEFAULT 0,
+
+    -- Thruster/control positions (JSONB for flexibility)
+    control_panel_position JSONB, -- {x, y, z} relative to schematic origin
+    thrusters JSONB DEFAULT '[]'::JSONB, -- Array of {position: {x,y,z}, power, fuelConsumption}
+    pilot_seat_position JSONB, -- {x, y, z} relative to schematic origin
+    passenger_seats JSONB DEFAULT '[]'::JSONB, -- Array of {position: {x,y,z}}
+
+    -- Gravity configuration (planar gravity for deck)
+    gravity_vector_x REAL NOT NULL DEFAULT 0,
+    gravity_vector_y REAL NOT NULL DEFAULT -1, -- Down = -Y by default
+    gravity_vector_z REAL NOT NULL DEFAULT 0,
+
+    -- Docking
+    docked_to_body_id UUID REFERENCES celestial_bodies(body_id) ON DELETE SET NULL,
+    docked_to_ship_id UUID REFERENCES ships(ship_id) ON DELETE SET NULL,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_piloted_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_ships_owner ON ships(owner_id);
+CREATE INDEX idx_ships_pilot ON ships(pilot_id) WHERE pilot_id IS NOT NULL;
+CREATE INDEX idx_ships_megachunk ON ships(megachunk_id);
+CREATE INDEX idx_ships_state ON ships(state);
+CREATE INDEX idx_ships_placement ON ships(schematic_placement_id);
+
+-- =============================================
+-- SHIP PASSENGERS (Players aboard ships)
+-- =============================================
+-- Track who is on which ship and where
+
+CREATE TABLE ship_passengers (
+    passenger_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    ship_id UUID NOT NULL REFERENCES ships(ship_id) ON DELETE CASCADE,
+    player_id UUID NOT NULL, -- References player_positions
+
+    -- Position relative to ship origin
+    local_x REAL NOT NULL DEFAULT 0,
+    local_y REAL NOT NULL DEFAULT 0,
+    local_z REAL NOT NULL DEFAULT 0,
+
+    -- Is this the pilot?
+    is_pilot BOOLEAN NOT NULL DEFAULT false,
+
+    -- Which seat (if seated)
+    seat_index INTEGER, -- null if standing, 0 = pilot seat, 1+ = passenger seats
+
+    -- Timestamps
+    boarded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    UNIQUE(player_id) -- Player can only be on one ship at a time
+);
+
+CREATE INDEX idx_ship_passengers_ship ON ship_passengers(ship_id);
+CREATE INDEX idx_ship_passengers_player ON ship_passengers(player_id);
 
 -- =============================================
 -- REGION SUBSCRIPTIONS (Interest management)

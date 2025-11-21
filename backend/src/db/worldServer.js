@@ -5,7 +5,7 @@
  * Handles: megachunks, celestial bodies, player positions, chunk modifications, placements
  */
 
-import { logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 
 // =============================================
 // WORLD SERVER DATABASE ADAPTER
@@ -125,8 +125,10 @@ export class WorldServerDB {
                 angular_velocity_x, angular_velocity_y, angular_velocity_z,
                 body_type, generation_seed, schematic_cid, procedural_params,
                 radius, mass, gravity_multiplier,
-                parent_body_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+                gravitational_center_x, gravitational_center_y, gravitational_center_z,
+                parent_body_id, original_body_id,
+                shatter_generation, parent_fragment_id, fracture_pattern
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
             RETURNING body_id, created_at
         `;
 
@@ -152,7 +154,14 @@ export class WorldServerDB {
             body.radius,
             body.mass,
             body.gravityMultiplier || 1.0,
-            body.parentBodyId || null
+            body.gravitationalCenterX || 0,
+            body.gravitationalCenterY || 0,
+            body.gravitationalCenterZ || 0,
+            body.parentBodyId || null,
+            body.originalBodyId || null,
+            body.shatterGeneration || 0,
+            body.parentFragmentId !== undefined ? body.parentFragmentId : null,
+            body.fracturePattern ? JSON.stringify(body.fracturePattern) : null
         ]);
 
         this.log.info('Celestial body created', {
@@ -498,22 +507,32 @@ export class WorldServerDB {
     /**
      * Record schematic placement
      * @param {Object} placement
+     * @param {string} placement.schematicId - Central Library schematic ID
+     * @param {string} placement.schematicCid - IPFS CID of .mvox file
+     * @param {number} placement.layerId - Layer index (0 = blocks, 1 = microblocks, etc.)
+     * @param {number} placement.layerScaleRatio - Scale ratio (1.0 = blocks, 0.0625 = microblocks)
+     * @param {string} placement.bodyId - Celestial body ID
+     * @param {number} placement.positionX/Y/Z - Position relative to gravitational center
      * @returns {Promise<Object>}
      */
     async recordSchematicPlacement(placement) {
         const query = `
             INSERT INTO schematic_placements (
-                schematic_id, schematic_cid, body_id,
+                schematic_id, schematic_cid,
+                layer_id, layer_scale_ratio,
+                body_id,
                 position_x, position_y, position_z,
                 rotation_x, rotation_y, rotation_z, rotation_w,
                 placed_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING placement_id, placed_at
         `;
 
         const result = await this.pool.query(query, [
             placement.schematicId,
             placement.schematicCid,
+            placement.layerId || 0,
+            placement.layerScaleRatio || 1.0,
             placement.bodyId,
             placement.positionX,
             placement.positionY,
@@ -527,7 +546,9 @@ export class WorldServerDB {
 
         this.log.info('Schematic placed', {
             placementId: result.rows[0].placement_id,
-            schematicId: placement.schematicId
+            schematicId: placement.schematicId,
+            layerId: placement.layerId || 0,
+            layerScaleRatio: placement.layerScaleRatio || 1.0
         });
 
         return result.rows[0];
@@ -547,6 +568,41 @@ export class WorldServerDB {
         `;
 
         const result = await this.pool.query(query, [bodyId]);
+        return result.rows;
+    }
+
+    /**
+     * Get schematic placements on body for a specific layer (sparse loading)
+     * @param {string} bodyId
+     * @param {number} layerId - Layer index (0 = blocks, 1 = microblocks, etc.)
+     * @returns {Promise<Array>}
+     */
+    async getSchematicPlacementsByLayer(bodyId, layerId) {
+        const query = `
+            SELECT *
+            FROM schematic_placements
+            WHERE body_id = $1 AND layer_id = $2
+            ORDER BY placed_at DESC
+        `;
+
+        const result = await this.pool.query(query, [bodyId, layerId]);
+        return result.rows;
+    }
+
+    /**
+     * Get all fragments of an original body (fracture lineage)
+     * @param {string} originalBodyId - The root body before any shattering
+     * @returns {Promise<Array>}
+     */
+    async getBodyFragments(originalBodyId) {
+        const query = `
+            SELECT *
+            FROM celestial_bodies
+            WHERE original_body_id = $1
+            ORDER BY shatter_generation ASC, created_at ASC
+        `;
+
+        const result = await this.pool.query(query, [originalBodyId]);
         return result.rows;
     }
 
@@ -714,6 +770,621 @@ export class WorldServerDB {
 
         const result = await this.pool.query(query, [limit]);
         return result.rows;
+    }
+
+    // =============================================
+    // DAMAGE MAP OPERATIONS
+    // =============================================
+
+    /**
+     * Record a voxel change in the damage map
+     * @param {Object} entry - Damage map entry
+     * @returns {Promise<Object>}
+     */
+    async recordDamageMapEntry(entry) {
+        const query = `
+            INSERT INTO damage_map (
+                body_id, voxel_x, voxel_y, voxel_z, layer_id,
+                change_type, voxel_type, voxel_color,
+                player_id, trust_score_at_change,
+                build_mode, attached_schematic_placement_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (body_id, voxel_x, voxel_y, voxel_z, layer_id) DO UPDATE
+            SET change_type = EXCLUDED.change_type,
+                voxel_type = EXCLUDED.voxel_type,
+                voxel_color = EXCLUDED.voxel_color,
+                player_id = EXCLUDED.player_id,
+                trust_score_at_change = EXCLUDED.trust_score_at_change,
+                build_mode = EXCLUDED.build_mode,
+                attached_schematic_placement_id = EXCLUDED.attached_schematic_placement_id,
+                created_at = NOW()
+            RETURNING damage_id, created_at
+        `;
+
+        const result = await this.pool.query(query, [
+            entry.bodyId,
+            entry.voxelX,
+            entry.voxelY,
+            entry.voxelZ,
+            entry.layerId || 0,
+            entry.changeType, // 'add' or 'remove'
+            entry.voxelType || null,
+            entry.voxelColor || null,
+            entry.playerId,
+            entry.trustScore || null,
+            entry.buildMode || 'new_schematic',
+            entry.attachedSchematicPlacementId || null
+        ]);
+
+        // Also record in history for undo support
+        await this.recordDamageMapHistory(entry);
+
+        return result.rows[0];
+    }
+
+    /**
+     * Record damage map change in history (for undo)
+     * @param {Object} entry
+     */
+    async recordDamageMapHistory(entry) {
+        const query = `
+            INSERT INTO damage_map_history (
+                body_id, voxel_x, voxel_y, voxel_z, layer_id,
+                change_type, voxel_type, voxel_color,
+                player_id, build_mode
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `;
+
+        await this.pool.query(query, [
+            entry.bodyId,
+            entry.voxelX,
+            entry.voxelY,
+            entry.voxelZ,
+            entry.layerId || 0,
+            entry.changeType,
+            entry.voxelType || null,
+            entry.voxelColor || null,
+            entry.playerId,
+            entry.buildMode || 'new_schematic'
+        ]);
+    }
+
+    /**
+     * Get all damage map entries for a body
+     * @param {string} bodyId
+     * @param {number} layerId - Optional layer filter
+     * @returns {Promise<Array>}
+     */
+    async getDamageMapForBody(bodyId, layerId = null) {
+        let query = `
+            SELECT *
+            FROM damage_map
+            WHERE body_id = $1
+        `;
+        const params = [bodyId];
+
+        if (layerId !== null) {
+            query += ` AND layer_id = $2`;
+            params.push(layerId);
+        }
+
+        query += ` ORDER BY created_at DESC`;
+
+        const result = await this.pool.query(query, params);
+        return result.rows;
+    }
+
+    /**
+     * Get unconverted damage map entries (not yet made into schematics)
+     * @param {string} bodyId
+     * @param {string} buildMode - Filter by build mode
+     * @returns {Promise<Array>}
+     */
+    async getUnconvertedDamageMap(bodyId, buildMode = 'new_schematic') {
+        const query = `
+            SELECT *
+            FROM damage_map
+            WHERE body_id = $1
+              AND build_mode = $2
+              AND converted_to_schematic_id IS NULL
+              AND change_type = 'add'
+            ORDER BY created_at ASC
+        `;
+
+        const result = await this.pool.query(query, [bodyId, buildMode]);
+        return result.rows;
+    }
+
+    /**
+     * Get damage map entries by player
+     * @param {string} playerId
+     * @param {string} bodyId - Optional body filter
+     * @returns {Promise<Array>}
+     */
+    async getDamageMapByPlayer(playerId, bodyId = null) {
+        let query = `
+            SELECT *
+            FROM damage_map
+            WHERE player_id = $1
+        `;
+        const params = [playerId];
+
+        if (bodyId) {
+            query += ` AND body_id = $2`;
+            params.push(bodyId);
+        }
+
+        query += ` ORDER BY created_at DESC`;
+
+        const result = await this.pool.query(query, params);
+        return result.rows;
+    }
+
+    /**
+     * Get damage map entries attached to a schematic placement (for EXTEND_BUILD mode)
+     * @param {string} placementId
+     * @returns {Promise<Array>}
+     */
+    async getDamageMapForPlacement(placementId) {
+        const query = `
+            SELECT *
+            FROM damage_map
+            WHERE attached_schematic_placement_id = $1
+            ORDER BY created_at ASC
+        `;
+
+        const result = await this.pool.query(query, [placementId]);
+        return result.rows;
+    }
+
+    /**
+     * Mark damage map entries as converted to a schematic
+     * @param {Array<string>} damageIds - Array of damage_id UUIDs
+     * @param {string} schematicId - The schematic these were converted to
+     * @returns {Promise<number>} Number of entries updated
+     */
+    async convertDamageToSchematic(damageIds, schematicId) {
+        if (!damageIds || damageIds.length === 0) return 0;
+
+        const query = `
+            UPDATE damage_map
+            SET converted_to_schematic_id = $1,
+                converted_at = NOW()
+            WHERE damage_id = ANY($2)
+        `;
+
+        const result = await this.pool.query(query, [schematicId, damageIds]);
+
+        this.log.info('Damage map entries converted to schematic', {
+            schematicId,
+            count: result.rowCount
+        });
+
+        return result.rowCount;
+    }
+
+    /**
+     * Delete damage map entries (after successful schematic creation)
+     * @param {Array<string>} damageIds
+     * @returns {Promise<number>}
+     */
+    async deleteDamageMapEntries(damageIds) {
+        if (!damageIds || damageIds.length === 0) return 0;
+
+        const query = `
+            DELETE FROM damage_map
+            WHERE damage_id = ANY($1)
+        `;
+
+        const result = await this.pool.query(query, [damageIds]);
+        return result.rowCount;
+    }
+
+    /**
+     * Get damage map entry at specific position
+     * @param {string} bodyId
+     * @param {number} x
+     * @param {number} y
+     * @param {number} z
+     * @param {number} layerId
+     * @returns {Promise<Object|null>}
+     */
+    async getDamageMapAt(bodyId, x, y, z, layerId = 0) {
+        const query = `
+            SELECT *
+            FROM damage_map
+            WHERE body_id = $1
+              AND voxel_x = $2
+              AND voxel_y = $3
+              AND voxel_z = $4
+              AND layer_id = $5
+        `;
+
+        const result = await this.pool.query(query, [bodyId, x, y, z, layerId]);
+        return result.rows[0] || null;
+    }
+
+    /**
+     * Get recent damage history for a player (for undo)
+     * @param {string} playerId
+     * @param {number} limit
+     * @returns {Promise<Array>}
+     */
+    async getPlayerDamageHistory(playerId, limit = 50) {
+        const query = `
+            SELECT *
+            FROM damage_map_history
+            WHERE player_id = $1
+              AND undone_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT $2
+        `;
+
+        const result = await this.pool.query(query, [playerId, limit]);
+        return result.rows;
+    }
+
+    /**
+     * Undo a damage map entry
+     * @param {string} historyId
+     * @param {string} undoneBy - Player who is undoing
+     * @returns {Promise<boolean>}
+     */
+    async undoDamageMapEntry(historyId, undoneBy) {
+        // Get the history entry
+        const historyQuery = `
+            SELECT * FROM damage_map_history WHERE history_id = $1
+        `;
+        const historyResult = await this.pool.query(historyQuery, [historyId]);
+        const historyEntry = historyResult.rows[0];
+
+        if (!historyEntry) return false;
+
+        // Delete from damage_map
+        const deleteQuery = `
+            DELETE FROM damage_map
+            WHERE body_id = $1
+              AND voxel_x = $2
+              AND voxel_y = $3
+              AND voxel_z = $4
+              AND layer_id = $5
+        `;
+
+        await this.pool.query(deleteQuery, [
+            historyEntry.body_id,
+            historyEntry.voxel_x,
+            historyEntry.voxel_y,
+            historyEntry.voxel_z,
+            historyEntry.layer_id
+        ]);
+
+        // Mark history as undone
+        const undoQuery = `
+            UPDATE damage_map_history
+            SET undone_at = NOW(),
+                undone_by = $1
+            WHERE history_id = $2
+        `;
+
+        await this.pool.query(undoQuery, [undoneBy, historyId]);
+
+        this.log.debug('Damage map entry undone', { historyId, undoneBy });
+        return true;
+    }
+
+    // =============================================
+    // PLAYER BUILD MODE OPERATIONS
+    // =============================================
+
+    /**
+     * Update player's build mode
+     * @param {string} playerId
+     * @param {string} buildMode - 'new_schematic' | 'extend_build' | 'raw_damage'
+     * @param {string} extendingPlacementId - If extend_build, which placement
+     * @returns {Promise<void>}
+     */
+    async updatePlayerBuildMode(playerId, buildMode, extendingPlacementId = null) {
+        const query = `
+            UPDATE player_positions
+            SET current_build_mode = $1,
+                extending_placement_id = $2
+            WHERE player_id = $3
+        `;
+
+        await this.pool.query(query, [buildMode, extendingPlacementId, playerId]);
+
+        this.log.debug('Player build mode updated', {
+            playerId,
+            buildMode,
+            extendingPlacementId
+        });
+    }
+
+    /**
+     * Get player's current build mode
+     * @param {string} playerId
+     * @returns {Promise<Object>}
+     */
+    async getPlayerBuildMode(playerId) {
+        const query = `
+            SELECT current_build_mode, extending_placement_id
+            FROM player_positions
+            WHERE player_id = $1
+        `;
+
+        const result = await this.pool.query(query, [playerId]);
+        if (result.rows.length === 0) {
+            return { buildMode: 'new_schematic', extendingPlacementId: null };
+        }
+
+        return {
+            buildMode: result.rows[0].current_build_mode,
+            extendingPlacementId: result.rows[0].extending_placement_id
+        };
+    }
+
+    // =============================================
+    // SHIP OPERATIONS
+    // =============================================
+
+    /**
+     * Create a ship from a schematic placement
+     * @param {Object} shipData
+     * @returns {Promise<Object>}
+     */
+    async createShip(shipData) {
+        const config = shipData.config || {};
+
+        const query = `
+            INSERT INTO ships (
+                schematic_placement_id, owner_id, name,
+                megachunk_id, position_x, position_y, position_z,
+                rotation_x, rotation_y, rotation_z, rotation_w,
+                mass, total_thrust, fuel_capacity, current_fuel, gyroscope_strength,
+                control_panel_position, thrusters, pilot_seat_position, passenger_seats,
+                gravity_vector_x, gravity_vector_y, gravity_vector_z
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+            RETURNING *
+        `;
+
+        const result = await this.pool.query(query, [
+            shipData.schematicPlacementId,
+            shipData.ownerId,
+            shipData.name || 'Unnamed Ship',
+            shipData.megachunkId || null,
+            shipData.position?.x || 0,
+            shipData.position?.y || 0,
+            shipData.position?.z || 0,
+            shipData.rotation?.x || 0,
+            shipData.rotation?.y || 0,
+            shipData.rotation?.z || 0,
+            shipData.rotation?.w || 1,
+            config.mass || 100,
+            config.totalThrust || 0,
+            config.fuelCapacity || 0,
+            config.currentFuel || config.fuelCapacity || 0,
+            config.gyroscopeStrength || 0,
+            JSON.stringify(config.controlPanelPosition || null),
+            JSON.stringify(config.thrusters || []),
+            JSON.stringify(config.pilotSeat || null),
+            JSON.stringify(config.passengerSeats || []),
+            config.gravityVector?.x || 0,
+            config.gravityVector?.y || -1,
+            config.gravityVector?.z || 0
+        ]);
+
+        this.log.info('Ship created', { shipId: result.rows[0].ship_id, name: shipData.name });
+        return result.rows[0];
+    }
+
+    /**
+     * Get ship by ID
+     * @param {string} shipId
+     * @returns {Promise<Object|null>}
+     */
+    async getShip(shipId) {
+        const query = `SELECT * FROM ships WHERE ship_id = $1`;
+        const result = await this.pool.query(query, [shipId]);
+        return result.rows[0] || null;
+    }
+
+    /**
+     * Get ship by schematic placement
+     * @param {string} placementId
+     * @returns {Promise<Object|null>}
+     */
+    async getShipByPlacement(placementId) {
+        const query = `SELECT * FROM ships WHERE schematic_placement_id = $1`;
+        const result = await this.pool.query(query, [placementId]);
+        return result.rows[0] || null;
+    }
+
+    /**
+     * Get all ships in a megachunk
+     * @param {string} megachunkId
+     * @returns {Promise<Array>}
+     */
+    async getShipsInMegachunk(megachunkId) {
+        const query = `
+            SELECT * FROM ships
+            WHERE megachunk_id = $1 AND state != 'destroyed'
+            ORDER BY created_at DESC
+        `;
+        const result = await this.pool.query(query, [megachunkId]);
+        return result.rows;
+    }
+
+    /**
+     * Update ship state
+     * @param {string} shipId
+     * @param {Object} updates
+     * @returns {Promise<Object>}
+     */
+    async updateShipState(shipId, updates) {
+        const allowedFields = [
+            'state', 'pilot_id', 'megachunk_id',
+            'position_x', 'position_y', 'position_z',
+            'velocity_x', 'velocity_y', 'velocity_z',
+            'rotation_x', 'rotation_y', 'rotation_z', 'rotation_w',
+            'angular_velocity_x', 'angular_velocity_y', 'angular_velocity_z',
+            'current_fuel', 'docked_to_body_id', 'docked_to_ship_id',
+            'last_piloted_at'
+        ];
+
+        const setClauses = [];
+        const values = [];
+        let paramIndex = 1;
+
+        for (const [key, value] of Object.entries(updates)) {
+            if (allowedFields.includes(key)) {
+                setClauses.push(`${key} = $${paramIndex}`);
+                values.push(value);
+                paramIndex++;
+            }
+        }
+
+        if (setClauses.length === 0) return null;
+
+        setClauses.push(`last_updated = NOW()`);
+        values.push(shipId);
+
+        const query = `
+            UPDATE ships
+            SET ${setClauses.join(', ')}
+            WHERE ship_id = $${paramIndex}
+            RETURNING *
+        `;
+
+        const result = await this.pool.query(query, values);
+        return result.rows[0];
+    }
+
+    /**
+     * Get player's current ship (if aboard any)
+     * @param {string} playerId
+     * @returns {Promise<Object|null>}
+     */
+    async getPlayerShip(playerId) {
+        const query = `
+            SELECT s.*
+            FROM ships s
+            JOIN ship_passengers sp ON s.ship_id = sp.ship_id
+            WHERE sp.player_id = $1
+        `;
+        const result = await this.pool.query(query, [playerId]);
+        return result.rows[0] || null;
+    }
+
+    /**
+     * Add passenger to ship
+     * @param {string} shipId
+     * @param {string} playerId
+     * @param {Object} options
+     * @returns {Promise<Object>}
+     */
+    async addShipPassenger(shipId, playerId, options = {}) {
+        const query = `
+            INSERT INTO ship_passengers (ship_id, player_id, is_pilot, seat_index)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (player_id) DO UPDATE
+            SET ship_id = EXCLUDED.ship_id,
+                is_pilot = EXCLUDED.is_pilot,
+                seat_index = EXCLUDED.seat_index,
+                boarded_at = NOW()
+            RETURNING *
+        `;
+
+        const result = await this.pool.query(query, [
+            shipId,
+            playerId,
+            options.isPilot || false,
+            options.seatIndex ?? null
+        ]);
+
+        this.log.debug('Player boarded ship', { shipId, playerId, isPilot: options.isPilot });
+        return result.rows[0];
+    }
+
+    /**
+     * Remove passenger from ship
+     * @param {string} shipId
+     * @param {string} playerId
+     * @returns {Promise<boolean>}
+     */
+    async removeShipPassenger(shipId, playerId) {
+        const query = `DELETE FROM ship_passengers WHERE ship_id = $1 AND player_id = $2`;
+        const result = await this.pool.query(query, [shipId, playerId]);
+        this.log.debug('Player exited ship', { shipId, playerId });
+        return result.rowCount > 0;
+    }
+
+    /**
+     * Get ship passenger
+     * @param {string} shipId
+     * @param {string} playerId
+     * @returns {Promise<Object|null>}
+     */
+    async getShipPassenger(shipId, playerId) {
+        const query = `SELECT * FROM ship_passengers WHERE ship_id = $1 AND player_id = $2`;
+        const result = await this.pool.query(query, [shipId, playerId]);
+        return result.rows[0] || null;
+    }
+
+    /**
+     * Update ship passenger
+     * @param {string} shipId
+     * @param {string} playerId
+     * @param {Object} updates
+     * @returns {Promise<Object>}
+     */
+    async updateShipPassenger(shipId, playerId, updates) {
+        const setClauses = [];
+        const values = [];
+        let paramIndex = 1;
+
+        for (const [key, value] of Object.entries(updates)) {
+            if (['is_pilot', 'seat_index', 'local_x', 'local_y', 'local_z'].includes(key)) {
+                setClauses.push(`${key} = $${paramIndex}`);
+                values.push(value);
+                paramIndex++;
+            }
+        }
+
+        if (setClauses.length === 0) return null;
+
+        values.push(shipId, playerId);
+
+        const query = `
+            UPDATE ship_passengers
+            SET ${setClauses.join(', ')}
+            WHERE ship_id = $${paramIndex} AND player_id = $${paramIndex + 1}
+            RETURNING *
+        `;
+
+        const result = await this.pool.query(query, values);
+        return result.rows[0];
+    }
+
+    /**
+     * Get all passengers on a ship
+     * @param {string} shipId
+     * @returns {Promise<Array>}
+     */
+    async getShipPassengers(shipId) {
+        const query = `SELECT * FROM ship_passengers WHERE ship_id = $1`;
+        const result = await this.pool.query(query, [shipId]);
+        return result.rows;
+    }
+
+    /**
+     * Get schematic placement by ID
+     * @param {string} placementId
+     * @returns {Promise<Object|null>}
+     */
+    async getSchematicPlacement(placementId) {
+        const query = `SELECT * FROM schematic_placements WHERE placement_id = $1`;
+        const result = await this.pool.query(query, [placementId]);
+        return result.rows[0] || null;
     }
 }
 

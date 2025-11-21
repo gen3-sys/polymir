@@ -1,4 +1,4 @@
-import { SEMANTIC, SEMANTIC_PRESETS } from '../Semantics.js';
+import { SEMANTIC, SEMANTIC_PRESETS, BLOCK_FUNCTION } from '../Semantics.js';
 import { Voxel } from './Voxel.js';
 
 export const VOXEL_TYPES = {
@@ -499,11 +499,158 @@ export const VOXEL_TYPES = {
         id: 301,
         name: 'Active Portal',
         color: 0x8800FF,
-        semantics: SEMANTIC.EMISSIVE | SEMANTIC.TRANSPARENT | SEMANTIC.INTERACTIVE,
+        semantics: SEMANTIC.EMISSIVE | SEMANTIC.TRANSPARENT,
         description: 'Active portal surface',
         hardness: 0,
         luminance: 15,
         soundType: 'portal'
+    },
+
+    // ============================================
+    // SHIP / VEHICLE BLOCKS (320-399)
+    // ============================================
+
+    CONTROL_PANEL: {
+        id: 320,
+        name: 'Control Panel',
+        color: 0x2196F3,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.EMISSIVE | SEMANTIC.BREAKABLE,
+        blockFunction: BLOCK_FUNCTION.CONTROL_PANEL,
+        description: 'Ship control panel - designates a build as a controllable ship',
+        hardness: 80,
+        luminance: 8,
+        soundType: 'metal'
+    },
+
+    THRUSTER_SMALL: {
+        id: 321,
+        name: 'Small Thruster',
+        color: 0xFF5722,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.BREAKABLE,
+        blockFunction: BLOCK_FUNCTION.THRUSTER,
+        description: 'Small ship thruster - provides basic propulsion',
+        hardness: 60,
+        soundType: 'metal',
+        thrustPower: 100,
+        fuelConsumption: 1
+    },
+
+    THRUSTER_MEDIUM: {
+        id: 322,
+        name: 'Medium Thruster',
+        color: 0xFF7043,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.BREAKABLE,
+        blockFunction: BLOCK_FUNCTION.THRUSTER,
+        description: 'Medium ship thruster - provides moderate propulsion',
+        hardness: 70,
+        soundType: 'metal',
+        thrustPower: 500,
+        fuelConsumption: 3
+    },
+
+    THRUSTER_LARGE: {
+        id: 323,
+        name: 'Large Thruster',
+        color: 0xFF8A65,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.BREAKABLE,
+        blockFunction: BLOCK_FUNCTION.THRUSTER,
+        description: 'Large ship thruster - provides high propulsion',
+        hardness: 80,
+        soundType: 'metal',
+        thrustPower: 2000,
+        fuelConsumption: 10
+    },
+
+    PILOT_SEAT: {
+        id: 324,
+        name: 'Pilot Seat',
+        color: 0x795548,
+        semantics: SEMANTIC.SOLID | SEMANTIC.BREAKABLE,
+        blockFunction: BLOCK_FUNCTION.SEAT,
+        description: 'Pilot seat - board ship from here',
+        hardness: 30,
+        soundType: 'wood',
+        isPilotSeat: true
+    },
+
+    PASSENGER_SEAT: {
+        id: 325,
+        name: 'Passenger Seat',
+        color: 0x8D6E63,
+        semantics: SEMANTIC.SOLID | SEMANTIC.BREAKABLE,
+        blockFunction: BLOCK_FUNCTION.SEAT,
+        description: 'Passenger seat',
+        hardness: 30,
+        soundType: 'wood',
+        isPilotSeat: false
+    },
+
+    HULL_LIGHT: {
+        id: 330,
+        name: 'Light Hull',
+        color: 0xB0BEC5,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.BREAKABLE,
+        description: 'Lightweight ship hull plating',
+        hardness: 50,
+        soundType: 'metal',
+        mass: 1
+    },
+
+    HULL_STANDARD: {
+        id: 331,
+        name: 'Standard Hull',
+        color: 0x78909C,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.BREAKABLE,
+        description: 'Standard ship hull plating',
+        hardness: 80,
+        soundType: 'metal',
+        mass: 3
+    },
+
+    HULL_HEAVY: {
+        id: 332,
+        name: 'Heavy Hull',
+        color: 0x546E7A,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.BREAKABLE,
+        description: 'Reinforced heavy hull plating',
+        hardness: 120,
+        soundType: 'metal',
+        mass: 8
+    },
+
+    FUEL_TANK: {
+        id: 340,
+        name: 'Fuel Tank',
+        color: 0xFFC107,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.BREAKABLE,
+        blockFunction: BLOCK_FUNCTION.STORAGE,
+        description: 'Ship fuel storage tank',
+        hardness: 40,
+        soundType: 'metal',
+        fuelCapacity: 1000
+    },
+
+    GYROSCOPE: {
+        id: 341,
+        name: 'Gyroscope',
+        color: 0x9C27B0,
+        semantics: SEMANTIC.SOLID | SEMANTIC.METAL | SEMANTIC.EMISSIVE | SEMANTIC.BREAKABLE,
+        description: 'Ship stabilization gyroscope',
+        hardness: 60,
+        luminance: 4,
+        soundType: 'metal',
+        stabilization: 10
+    },
+
+    SHIP_LIGHT: {
+        id: 350,
+        name: 'Ship Light',
+        color: 0xFFFFFF,
+        semantics: SEMANTIC.SOLID | SEMANTIC.EMISSIVE | SEMANTIC.BREAKABLE,
+        description: 'Ship-mounted light',
+        hardness: 20,
+        luminance: 14,
+        soundType: 'glass'
     }
 };
 

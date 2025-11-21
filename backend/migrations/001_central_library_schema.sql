@@ -65,9 +65,30 @@ CREATE TABLE schematics (
     tags TEXT[], -- Array of tags
     biomes TEXT[], -- Which biomes this can spawn in
 
+    -- Gravity alignment for placement
+    -- Defines which direction is "down" for this schematic (normalized vector)
+    -- Default [0, -1, 0] = Y-down. Placement aligns this toward gravitational center
+    gravity_vector_x REAL NOT NULL DEFAULT 0,
+    gravity_vector_y REAL NOT NULL DEFAULT -1,
+    gravity_vector_z REAL NOT NULL DEFAULT 0,
+
+    -- Anchor point for placement (normalized 0-1 within bounds)
+    -- Default [0.5, 0, 0.5] = center of bottom face
+    anchor_point_x REAL NOT NULL DEFAULT 0.5,
+    anchor_point_y REAL NOT NULL DEFAULT 0,
+    anchor_point_z REAL NOT NULL DEFAULT 0.5,
+
     -- Metadata
     is_planet BOOLEAN NOT NULL DEFAULT false, -- Planet vs structure
     spawn_frequency REAL DEFAULT 0.0 CHECK (spawn_frequency >= 0.0 AND spawn_frequency <= 1.0),
+
+    -- Build hierarchy
+    -- is_composite: FALSE = singular schematic (just voxels), TRUE = build (contains schematic references)
+    -- A "build" is a composite that references other schematics with relative positions
+    -- Example: A house (build) contains furniture schematics at specific offsets
+    is_composite BOOLEAN NOT NULL DEFAULT false,
+    -- If this is a composite, how many schematics does it contain?
+    component_count INTEGER NOT NULL DEFAULT 0,
 
     -- Statistics
     download_count INTEGER NOT NULL DEFAULT 0,
@@ -88,6 +109,52 @@ CREATE INDEX idx_schematics_tags ON schematics USING GIN(tags);
 CREATE INDEX idx_schematics_created_at ON schematics(created_at DESC);
 CREATE INDEX idx_schematics_download_count ON schematics(download_count DESC);
 CREATE INDEX idx_schematics_file_cid ON schematics(file_cid);
+CREATE INDEX idx_schematics_composite ON schematics(is_composite) WHERE is_composite = true;
+
+-- =============================================
+-- SCHEMATIC REFERENCES (Build composition)
+-- =============================================
+-- When is_composite = true, this table defines what schematics the build contains
+-- Each reference has a relative position/rotation within the parent build
+
+CREATE TABLE schematic_references (
+    reference_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    -- The composite build that contains this reference
+    parent_schematic_id UUID NOT NULL REFERENCES schematics(schematic_id) ON DELETE CASCADE,
+
+    -- The schematic being referenced (can itself be composite for nested builds)
+    child_schematic_id UUID NOT NULL REFERENCES schematics(schematic_id) ON DELETE CASCADE,
+
+    -- Position relative to parent's origin (in parent's local space)
+    offset_x REAL NOT NULL DEFAULT 0,
+    offset_y REAL NOT NULL DEFAULT 0,
+    offset_z REAL NOT NULL DEFAULT 0,
+
+    -- Rotation relative to parent (quaternion)
+    -- This is ADDITIONAL rotation on top of gravity alignment
+    rotation_x REAL NOT NULL DEFAULT 0,
+    rotation_y REAL NOT NULL DEFAULT 0,
+    rotation_z REAL NOT NULL DEFAULT 0,
+    rotation_w REAL NOT NULL DEFAULT 1,
+
+    -- Layer this component belongs to (for sparse multi-scale builds)
+    layer_id INTEGER NOT NULL DEFAULT 0,
+    layer_scale_ratio REAL NOT NULL DEFAULT 1.0,
+
+    -- Ordering (for deterministic iteration)
+    sort_order INTEGER NOT NULL DEFAULT 0,
+
+    -- Timestamps
+    added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Prevent duplicate references at same position
+    UNIQUE(parent_schematic_id, child_schematic_id, offset_x, offset_y, offset_z, layer_id)
+);
+
+CREATE INDEX idx_schematic_refs_parent ON schematic_references(parent_schematic_id);
+CREATE INDEX idx_schematic_refs_child ON schematic_references(child_schematic_id);
+CREATE INDEX idx_schematic_refs_layer ON schematic_references(parent_schematic_id, layer_id);
 
 -- =============================================
 -- SCHEMATIC USAGE TRACKING (for creator rewards)

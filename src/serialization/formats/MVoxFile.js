@@ -1,4 +1,5 @@
 import { NBT } from './NBT.js';
+import { LayerConfiguration } from '../../world/LayerConfiguration.js';
 
 export class MVoxFile {
     constructor(type, voxels, metadata = {}) {
@@ -6,8 +7,19 @@ export class MVoxFile {
         this.voxels = voxels;
         this.metadata = metadata;
         this.references = [];
+        this.layerConfig = null; // LayerConfiguration for multi-layer files
+
+        // Composite build support
+        // isComposite: true = this is a "build" containing schematic references
+        // isComposite: false = this is a singular schematic (just voxels)
+        this.isComposite = metadata.isComposite || false;
+        this.components = []; // Child schematic references for composite builds
     }
 
+    /**
+     * Add a nested schematic reference (for composite builds)
+     * @deprecated Use addComponent() for composite builds
+     */
     addReference(mvoxId, scaleRatio, position = [0, 0, 0], rotation = [0, 0, 0]) {
         this.references.push({
             mvox_id: mvoxId,
@@ -15,6 +27,57 @@ export class MVoxFile {
             position,
             rotation
         });
+    }
+
+    /**
+     * Add a component schematic to this composite build
+     * @param {Object} component - Component definition
+     * @param {string} component.schematicId - Central Library schematic ID
+     * @param {string} component.schematicCid - IPFS CID of the .mvox file
+     * @param {Array<number>} component.offset - Position relative to build origin [x, y, z]
+     * @param {Array<number>} component.rotation - Quaternion rotation [x, y, z, w]
+     * @param {number} component.layerId - Layer index (0 = blocks, 1 = microblocks)
+     * @param {number} component.layerScaleRatio - Scale ratio for this component
+     */
+    addComponent(component) {
+        this.isComposite = true;
+        this.components.push({
+            schematic_id: component.schematicId,
+            schematic_cid: component.schematicCid,
+            offset: component.offset || [0, 0, 0],
+            rotation: component.rotation || [0, 0, 0, 1],
+            layer_id: component.layerId || 0,
+            layer_scale_ratio: component.layerScaleRatio || 1.0,
+            sort_order: this.components.length
+        });
+    }
+
+    /**
+     * Check if this is a composite build (contains other schematics)
+     */
+    getIsComposite() {
+        return this.isComposite || this.components.length > 0;
+    }
+
+    /**
+     * Get all component schematics (for composite builds)
+     */
+    getComponents() {
+        return this.components;
+    }
+
+    /**
+     * Set layer configuration for multi-layer voxel data
+     */
+    setLayerConfiguration(layerConfig) {
+        this.layerConfig = layerConfig;
+    }
+
+    /**
+     * Get layer configuration
+     */
+    getLayerConfiguration() {
+        return this.layerConfig;
     }
 
     encode() {
@@ -46,6 +109,17 @@ export class MVoxFile {
                 description: this.metadata.description || '',
                 biomes: this.metadata.biomes || [],
                 spawnFrequency: this.metadata.spawnFrequency || 0.05,
+
+                // Gravity alignment for placement
+                // Defines which direction is "down" for this schematic
+                // Default [0, -1, 0] = Y-down (standard for most builds)
+                // Placement aligns this vector to point toward gravitational center
+                gravityVector: this.metadata.gravityVector || [0, -1, 0],
+
+                // Optional: anchor point for placement (default: center-bottom)
+                // [0.5, 0, 0.5] = center of bottom face
+                anchorPoint: this.metadata.anchorPoint || [0.5, 0, 0.5],
+
                 // Planet generation config
                 gravitationalCenter: this.metadata.gravitationalCenter,
                 gravitationalRadius: this.metadata.gravitationalRadius,
@@ -63,6 +137,19 @@ export class MVoxFile {
 
         if (this.references.length > 0) {
             header.references = this.references;
+        }
+
+        // Composite build support
+        // isComposite: true = "build" containing other schematics
+        // isComposite: false = singular schematic (just voxels)
+        header.isComposite = this.getIsComposite();
+        if (this.components.length > 0) {
+            header.components = this.components;
+        }
+
+        // Add layer configuration to header if present
+        if (this.layerConfig) {
+            header.layerConfiguration = this.layerConfig.toJSON();
         }
 
         const headerJson = JSON.stringify(header);
@@ -120,12 +207,28 @@ export class MVoxFile {
                 hasShattered: header.hasShattered,
                 shatterGeneration: header.shatterGeneration,
                 parentFragmentID: header.parentFragmentID,
-                impostorOnly: header.impostorOnly
+                impostorOnly: header.impostorOnly,
+                // Composite build flag
+                isComposite: header.isComposite || false
             }
         );
 
         if (header.references) {
             file.references = header.references;
+        }
+
+        // Load composite build components
+        if (header.isComposite) {
+            file.isComposite = true;
+        }
+        if (header.components && header.components.length > 0) {
+            file.components = header.components;
+            file.isComposite = true;
+        }
+
+        // Load layer configuration if present
+        if (header.layerConfiguration) {
+            file.layerConfig = LayerConfiguration.fromJSON(header.layerConfiguration);
         }
 
         return file;

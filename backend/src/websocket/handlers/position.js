@@ -4,7 +4,7 @@
  * Handles player position updates and broadcasts to nearby players
  */
 
-import { logger } from '../../utils/logger.js';
+import logger from '../../utils/logger.js';
 
 const log = logger.child('WS:Position');
 

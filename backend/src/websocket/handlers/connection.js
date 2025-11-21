@@ -4,7 +4,7 @@
  * Handles player authentication and connection management
  */
 
-import { logger } from '../../utils/logger.js';
+import logger from '../../utils/logger.js';
 
 const log = logger.child('WS:Connection');
 

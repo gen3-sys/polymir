@@ -5,7 +5,7 @@
  * Implements interest management for efficient network updates
  */
 
-import { logger } from '../../utils/logger.js';
+import logger from '../../utils/logger.js';
 
 const log = logger.child('WS:Subscription');
 

@@ -6,7 +6,7 @@
  */
 
 import { WebSocketServer } from 'ws';
-import { logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 
 // =============================================
@@ -333,9 +333,13 @@ export class PolymirWebSocketServer {
      * Broadcast to players subscribed to a megachunk
      * @param {string} megachunkId
      * @param {Object} message
+     * @param {string} excludeConnectionId - Optional connection to exclude (sender)
      */
-    broadcastToMegachunk(megachunkId, message) {
+    broadcastToMegachunk(megachunkId, message, excludeConnectionId = null) {
         return this.broadcast(message, (clientInfo) => {
+            if (excludeConnectionId && clientInfo.connectionId === excludeConnectionId) {
+                return false;
+            }
             return clientInfo.subscriptions.megachunks.has(megachunkId);
         });
     }
@@ -344,9 +348,13 @@ export class PolymirWebSocketServer {
      * Broadcast to players subscribed to a celestial body
      * @param {string} bodyId
      * @param {Object} message
+     * @param {string} excludeConnectionId - Optional connection to exclude (sender)
      */
-    broadcastToBody(bodyId, message) {
+    broadcastToBody(bodyId, message, excludeConnectionId = null) {
         return this.broadcast(message, (clientInfo) => {
+            if (excludeConnectionId && clientInfo.connectionId === excludeConnectionId) {
+                return false;
+            }
             return clientInfo.subscriptions.bodies.has(bodyId);
         });
     }

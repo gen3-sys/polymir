@@ -5,8 +5,8 @@
  * Notifies validators of pending validations in their region
  */
 
-import { logger } from '../../utils/logger.js';
-import { calculateValidatorRequirement } from '../../utils/trust.js';
+import logger from '../../utils/logger.js';
+import { getValidatorsRequired } from '../../utils/trust.js';
 
 const log = logger.child('WS:Validation');
 
@@ -58,7 +58,7 @@ export function createValidationNotificationHandler(centralLibraryDB) {
         try {
             // Get player trust score
             const player = await centralLibraryDB.getPlayerById(clientInfo.playerId);
-            const validatorsRequired = calculateValidatorRequirement(player.trust_score);
+            const validatorsRequired = getValidatorsRequired(player.trust_score);
 
             // Create consensus result
             const consensus = await centralLibraryDB.createConsensusResult({
@@ -215,7 +215,7 @@ export function createValidationVoteHandler(centralLibraryDB) {
             const totalVotes = votes.length;
 
             // Check if consensus reached
-            const requiredValidators = calculateValidatorRequirement(0.5); // Default
+            const requiredValidators = getValidatorsRequired(0.5); // Default
             let consensusReached = false;
             let isValid = null;
 
