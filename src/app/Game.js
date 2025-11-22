@@ -18,8 +18,8 @@ import { CameraTransition } from '../controls/CameraTransition.js';
 import { MVoxLoader } from '../data/mvox/MVoxLoader.js';
 import { GeometryBufferPool } from '../memory/GeometryBufferPool.js';
 import { BiomeConfiguration } from '../config/BiomeConfiguration.js';
-import globalBiomeEventBus, { BIOME_EVENTS } from '../systems/BiomeConfigEventBus.js';
-import { VoxelCollisionSystem } from '../systems/VoxelCollisionSystem.js';
+import globalBiomeEventBus, { BIOME_EVENTS } from '../systems/biome/BiomeConfigEventBus.js';
+import { VoxelCollisionSystem } from '../physics/collision/VoxelCollisionSystem.js';
 
 export class Game {
     constructor(canvas) {
@@ -86,6 +86,10 @@ export class Game {
 
     setupOrbitalSystem() {
         this.orbitalSystem = new OrbitalSystem(this.scene);
+
+        // Expose as aliases for UI components that expect these names
+        this.systemEngine = this.orbitalSystem;
+        this.unifiedEngine = this.orbitalSystem;
 
         const ambient = new THREE.AmbientLight(0xffffff, 0.3);
         this.scene.add(ambient);
@@ -940,3 +944,4 @@ export class Game {
         this.removeDebugHelpers();
     }
 }
+

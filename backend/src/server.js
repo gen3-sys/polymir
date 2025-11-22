@@ -23,6 +23,9 @@ import { registerSubscriptionHandlers } from './websocket/handlers/subscription.
 import { registerValidationHandlers as registerWsValidationHandlers } from './websocket/handlers/validation.js';
 import { registerDamageHandlers } from './websocket/handlers/damage.js';
 import { registerShipHandlers } from './websocket/handlers/ships.js';
+import { registerChatHandlers } from './websocket/handlers/chat.js';
+import { chatLogger } from './utils/chatLogger.js';
+import { PlayerStateManager } from './realtime/PlayerStateManager.js';
 import { getCorsMiddleware } from './api/middleware/cors.js';
 import { createAuthMiddleware, requireTrustScore } from './api/middleware/auth.js';
 import { createPlayerRoutes } from './api/routes/players.js';
@@ -51,7 +54,8 @@ const serverState = {
     expressApp: null,
     httpServer: null,
     wsServer: null,
-    physicsSystem: null
+    physicsSystem: null,
+    playerStateManager: null
 };
 
 // =============================================
@@ -257,16 +261,24 @@ async function initialize() {
 
         await serverState.wsServer.initialize();
 
+        // Initialize player state manager BEFORE handlers (handlers need reference)
+        serverState.playerStateManager = new PlayerStateManager(
+            serverState.wsServer,
+            serverState.worldServerDB
+        );
+
         // Register WebSocket handlers
         registerConnectionHandlers(
             serverState.wsServer,
             serverState.centralLibraryDB,
-            serverState.worldServerDB
+            serverState.worldServerDB,
+            serverState.playerStateManager
         );
 
         registerPositionHandlers(
             serverState.wsServer,
-            serverState.worldServerDB
+            serverState.worldServerDB,
+            serverState.playerStateManager
         );
 
         registerSubscriptionHandlers(
@@ -289,6 +301,10 @@ async function initialize() {
             serverState.worldServerDB
         );
 
+        // Initialize chat logger and register handlers
+        await chatLogger.initialize();
+        registerChatHandlers(serverState.wsServer);
+
         log.info(`WebSocket server listening on ${config.websocket.url}`);
 
         // =============================================
@@ -304,9 +320,17 @@ async function initialize() {
         serverState.physicsSystem.start();
 
         // =============================================
+        // STEP 8.5: Start real-time player state manager tick loop
+        // =============================================
+        log.info('Step 8.5/10: Starting player state manager tick loop...');
+
+        serverState.playerStateManager.start();
+        log.info('Player state manager running at 20 Hz tick rate');
+
+        // =============================================
         // STEP 9: Register server in central library
         // =============================================
-        log.info('Step 9/9: Registering server in central library...');
+        log.info('Step 9/10: Registering server in central library...');
 
         // Generate peer ID - use libp2p peerId if available, otherwise use server ID
         const libp2pPeerId = serverState.libp2pNode
@@ -389,11 +413,21 @@ async function shutdown(exitCode = 0) {
     try {
         // Shutdown in reverse order of initialization
 
+        // Stop player state manager with graceful shutdown (persists final state)
+        if (serverState.playerStateManager) {
+            log.info('Stopping player state manager...');
+            await serverState.playerStateManager.shutdown();
+        }
+
         // Stop physics system
         if (serverState.physicsSystem) {
             log.info('Stopping physics system...');
             serverState.physicsSystem.stop();
         }
+
+        // Close chat logger
+        log.info('Closing chat logger...');
+        await chatLogger.close();
 
         // Close WebSocket server
         if (serverState.wsServer) {

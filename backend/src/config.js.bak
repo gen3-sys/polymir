@@ -1,0 +1,384 @@
+/**
+ * POLYMIR BACKEND CONFIGURATION
+ * ==============================
+ * Loads and validates configuration from environment variables
+ * Provides sensible defaults for all settings
+ */
+
+import dotenv from 'dotenv';
+import { logger } from './utils/logger.js';
+
+// Load .env file
+dotenv.config();
+
+const log = logger.child('Config');
+
+// =============================================
+// CONFIGURATION VALIDATION
+// =============================================
+
+/**
+ * Get required environment variable or throw error
+ * @param {string} key
+ * @param {string} description
+ * @returns {string}
+ */
+function getRequired(key, description) {
+    const value = process.env[key];
+
+    if (!value) {
+        log.error(`Missing required configuration: ${key} (${description})`);
+        throw new Error(`Missing required environment variable: ${key}`);
+    }
+
+    return value;
+}
+
+/**
+ * Get optional environment variable with default
+ * @param {string} key
+ * @param {any} defaultValue
+ * @returns {string}
+ */
+function getOptional(key, defaultValue) {
+    return process.env[key] || defaultValue;
+}
+
+/**
+ * Parse integer from environment variable
+ * @param {string} key
+ * @param {number} defaultValue
+ * @returns {number}
+ */
+function getInt(key, defaultValue) {
+    const value = process.env[key];
+
+    if (!value) {
+        return defaultValue;
+    }
+
+    const parsed = parseInt(value, 10);
+
+    if (isNaN(parsed)) {
+        log.warn(`Invalid integer for ${key}: ${value}, using default: ${defaultValue}`);
+        return defaultValue;
+    }
+
+    return parsed;
+}
+
+/**
+ * Parse float from environment variable
+ * @param {string} key
+ * @param {number} defaultValue
+ * @returns {number}
+ */
+function getFloat(key, defaultValue) {
+    const value = process.env[key];
+
+    if (!value) {
+        return defaultValue;
+    }
+
+    const parsed = parseFloat(value);
+
+    if (isNaN(parsed)) {
+        log.warn(`Invalid float for ${key}: ${value}, using default: ${defaultValue}`);
+        return defaultValue;
+    }
+
+    return parsed;
+}
+
+/**
+ * Parse boolean from environment variable
+ * @param {string} key
+ * @param {boolean} defaultValue
+ * @returns {boolean}
+ */
+function getBool(key, defaultValue) {
+    const value = process.env[key];
+
+    if (!value) {
+        return defaultValue;
+    }
+
+    return value.toLowerCase() === 'true';
+}
+
+// =============================================
+// CONFIGURATION OBJECT
+// =============================================
+
+export const config = {
+    // =============================================
+    // ENVIRONMENT
+    // =============================================
+    env: getOptional('NODE_ENV', 'development'),
+    logLevel: getOptional('LOG_LEVEL', 'info'),
+
+    isDevelopment() {
+        return this.env === 'development';
+    },
+
+    isProduction() {
+        return this.env === 'production';
+    },
+
+    // =============================================
+    // DATABASE - CENTRAL LIBRARY
+    // =============================================
+    centralDB: {
+        host: getOptional('CENTRAL_DB_HOST', 'localhost'),
+        port: getInt('CENTRAL_DB_PORT', 5432),
+        database: getOptional('CENTRAL_DB_NAME', 'polymir_central'),
+        user: getOptional('CENTRAL_DB_USER', 'polymir'),
+        password: getOptional('CENTRAL_DB_PASSWORD', 'polymir'),
+
+        // Connection pool settings
+        maxConnections: getInt('CENTRAL_DB_MAX_CONNECTIONS', 20),
+        minConnections: getInt('CENTRAL_DB_MIN_CONNECTIONS', 2),
+        idleTimeout: getInt('CENTRAL_DB_IDLE_TIMEOUT', 30000),
+        connectionTimeout: getInt('CENTRAL_DB_CONNECTION_TIMEOUT', 5000)
+    },
+
+    // =============================================
+    // DATABASE - WORLD SERVER
+    // =============================================
+    worldDB: {
+        host: getOptional('WORLD_DB_HOST', 'localhost'),
+        port: getInt('WORLD_DB_PORT', 5432),
+        database: getOptional('WORLD_DB_NAME', 'polymir_world'),
+        user: getOptional('WORLD_DB_USER', 'polymir'),
+        password: getOptional('WORLD_DB_PASSWORD', 'polymir'),
+
+        // Connection pool settings
+        maxConnections: getInt('WORLD_DB_MAX_CONNECTIONS', 20),
+        minConnections: getInt('WORLD_DB_MIN_CONNECTIONS', 2),
+        idleTimeout: getInt('WORLD_DB_IDLE_TIMEOUT', 30000),
+        connectionTimeout: getInt('WORLD_DB_CONNECTION_TIMEOUT', 5000)
+    },
+
+    // =============================================
+    // IPFS
+    // =============================================
+    ipfs: {
+        host: getOptional('IPFS_HOST', 'localhost'),
+        port: getInt('IPFS_PORT', 5001),
+        protocol: getOptional('IPFS_PROTOCOL', 'http'),
+
+        get apiUrl() {
+            return `${this.protocol}://${this.host}:${this.port}`;
+        }
+    },
+
+    // =============================================
+    // LIBP2P
+    // =============================================
+    libp2p: {
+        listenTcp: getOptional('LIBP2P_LISTEN_TCP', '/ip4/0.0.0.0/tcp/4001'),
+        listenWs: getOptional('LIBP2P_LISTEN_WS', '/ip4/0.0.0.0/tcp/4002/ws'),
+        announceAddr: getOptional('LIBP2P_ANNOUNCE_ADDR', '/ip4/127.0.0.1/tcp/4001'),
+
+        // Bootstrap nodes (comma-separated)
+        bootstrapNodes: getOptional('LIBP2P_BOOTSTRAP_NODES', '').split(',').filter(n => n.trim()),
+
+        // GossipSub topics
+        topics: {
+            validations: 'polymir/validations',
+            world: 'polymir/world',
+            chat: 'polymir/chat'
+        }
+    },
+
+    // =============================================
+    // SERVER IDENTITY
+    // =============================================
+    server: {
+        id: getOptional('SERVER_ID', '11111111-1111-1111-1111-111111111111'),
+        name: getOptional('SERVER_NAME', 'polymir-main'),
+        rulesetHash: getOptional('RULESET_HASH', 'DEFAULT_RULESET_V1'),
+
+        // Position in supercluster federation
+        position: {
+            x: getInt('SERVER_POSITION_X', 0),
+            y: getInt('SERVER_POSITION_Y', 0),
+            z: getInt('SERVER_POSITION_Z', 0)
+        }
+    },
+
+    // =============================================
+    // API (REST)
+    // =============================================
+    api: {
+        port: getInt('API_PORT', 3000),
+        host: getOptional('API_HOST', '0.0.0.0'),
+
+        get url() {
+            return `http://${this.host === '0.0.0.0' ? 'localhost' : this.host}:${this.port}`;
+        }
+    },
+
+    // =============================================
+    // WEBSOCKET
+    // =============================================
+    websocket: {
+        port: getInt('WS_PORT', 3001),
+        host: getOptional('WS_HOST', '0.0.0.0'),
+
+        // WebSocket settings
+        pingInterval: getInt('WS_PING_INTERVAL', 30000),
+        pingTimeout: getInt('WS_PING_TIMEOUT', 5000),
+        maxConnections: getInt('WS_MAX_CONNECTIONS', 1000),
+
+        get url() {
+            return `ws://${this.host === '0.0.0.0' ? 'localhost' : this.host}:${this.port}`;
+        }
+    },
+
+    // =============================================
+    // CORS
+    // =============================================
+    cors: {
+        origins: getOptional('CORS_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000')
+            .split(',')
+            .map(o => o.trim())
+            .filter(o => o)
+    },
+
+    // =============================================
+    // TRUST & VALIDATION
+    // =============================================
+    trust: {
+        // Trust score adjustments
+        increaseCorrect: getFloat('TRUST_INCREASE_CORRECT', 0.02),
+        decreaseIncorrect: getFloat('TRUST_DECREASE_INCORRECT', 0.10),
+        initialScore: getFloat('TRUST_INITIAL_SCORE', 0.5),
+
+        // Validation requirements by trust tier
+        thresholds: {
+            high: getFloat('VALIDATION_HIGH_TRUST', 0.9),
+            medium: getFloat('VALIDATION_MEDIUM_TRUST', 0.5),
+            low: getFloat('VALIDATION_LOW_TRUST', 0.0)
+        },
+
+        validatorsRequired: {
+            high: getInt('VALIDATORS_REQUIRED_HIGH', 0),
+            medium: getInt('VALIDATORS_REQUIRED_MEDIUM', 3),
+            low: getInt('VALIDATORS_REQUIRED_LOW', 5)
+        },
+
+        // Validation timeout
+        validationTimeout: getInt('VALIDATION_TIMEOUT_MS', 300000) // 5 minutes
+    },
+
+    // =============================================
+    // PHYSICS
+    // =============================================
+    physics: {
+        tickRate: getInt('PHYSICS_TICK_RATE_HZ', 10),
+
+        get tickInterval() {
+            return Math.floor(1000 / this.tickRate);
+        }
+    }
+};
+
+// =============================================
+// VALIDATION
+// =============================================
+
+/**
+ * Validate critical configuration
+ * @throws {Error} If configuration is invalid
+ */
+function validateConfig() {
+    const errors = [];
+
+    // Validate ports
+    if (config.api.port < 1 || config.api.port > 65535) {
+        errors.push('API_PORT must be between 1 and 65535');
+    }
+
+    if (config.websocket.port < 1 || config.websocket.port > 65535) {
+        errors.push('WS_PORT must be between 1 and 65535');
+    }
+
+    if (config.api.port === config.websocket.port) {
+        errors.push('API_PORT and WS_PORT cannot be the same');
+    }
+
+    // Validate trust thresholds
+    if (config.trust.thresholds.high < config.trust.thresholds.medium ||
+        config.trust.thresholds.medium < config.trust.thresholds.low) {
+        errors.push('Trust thresholds must be: high >= medium >= low');
+    }
+
+    // Validate validator requirements
+    if (config.trust.validatorsRequired.high < 0 ||
+        config.trust.validatorsRequired.medium < 0 ||
+        config.trust.validatorsRequired.low < 0) {
+        errors.push('Validator requirements must be >= 0');
+    }
+
+    // Validate physics tick rate
+    if (config.physics.tickRate < 1 || config.physics.tickRate > 60) {
+        errors.push('PHYSICS_TICK_RATE_HZ must be between 1 and 60');
+    }
+
+    if (errors.length > 0) {
+        log.error('Configuration validation failed', { errors });
+        throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);
+    }
+
+    log.info('Configuration validated successfully');
+}
+
+// Validate on load
+validateConfig();
+
+// =============================================
+// LOGGING
+// =============================================
+
+/**
+ * Log configuration summary (hide sensitive data)
+ */
+export function logConfigSummary() {
+    log.info('Server configuration loaded', {
+        env: config.env,
+        serverId: config.server.id,
+        serverName: config.server.name,
+        api: {
+            host: config.api.host,
+            port: config.api.port
+        },
+        websocket: {
+            host: config.websocket.host,
+            port: config.websocket.port
+        },
+        database: {
+            central: {
+                host: config.centralDB.host,
+                database: config.centralDB.database
+            },
+            world: {
+                host: config.worldDB.host,
+                database: config.worldDB.database
+            }
+        },
+        ipfs: {
+            host: config.ipfs.host,
+            port: config.ipfs.port
+        },
+        physics: {
+            tickRate: config.physics.tickRate
+        }
+    });
+}
+
+// =============================================
+// EXPORTS
+// =============================================
+
+export default config;

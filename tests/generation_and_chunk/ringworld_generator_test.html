@@ -137,8 +137,8 @@
         let vertexShaderSource = '';
         let fragmentShaderSource = '';
 
-        const vertexShaderPromise = fetch('./src/rendering/shaders/curved-surface-voxel.vert.glsl').then(r => r.text());
-        const fragmentShaderPromise = fetch('./src/rendering/shaders/curved-surface-voxel.frag.glsl').then(r => r.text());
+        const vertexShaderPromise = fetch('./src/rendering/shaders/core/curved-surface-voxel.vert.glsl').then(r => r.text());
+        const fragmentShaderPromise = fetch('./src/rendering/shaders/core/curved-surface-voxel.frag.glsl').then(r => r.text());
 
         Promise.all([vertexShaderPromise, fragmentShaderPromise]).then(([vert, frag]) => {
             vertexShaderSource = vert;

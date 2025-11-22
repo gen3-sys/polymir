@@ -6,7 +6,7 @@
  */
 
 import cors from 'cors';
-import { logger } from '../../utils/logger.js';
+import logger from '../../utils/logger.js';
 
 // =============================================
 // CORS CONFIGURATION
@@ -17,7 +17,7 @@ import { logger } from '../../utils/logger.js';
  * @returns {Array<string>}
  */
 function getAllowedOrigins() {
-    const originsEnv = process.env.CORS_ORIGINS || 'http://localhost:8000';
+    const originsEnv = process.env.CORS_ORIGINS || 'http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000';
     const origins = originsEnv.split(',').map(origin => origin.trim());
 
     logger.info('CORS allowed origins', { origins });

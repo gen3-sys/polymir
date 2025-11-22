@@ -1,5 +1,5 @@
-import { BiomeSystem } from '../systems/BiomeSystem.js';
-import globalBiomeEventBus, { BIOME_EVENTS } from '../systems/BiomeConfigEventBus.js';
+import { BiomeSystem } from '../systems/biome/BiomeSystem.js';
+import globalBiomeEventBus, { BIOME_EVENTS } from '../systems/biome/BiomeConfigEventBus.js';
 
 export class BiomeConfiguration {
     constructor(config = {}) {
@@ -115,6 +115,37 @@ export class BiomeConfiguration {
             volcanic: ['calderas', 'lava_tubes']
         };
         return structureMap[biome] || [];
+    }
+
+    /**
+     * Register a custom biome
+     * @param {string} name - Biome name
+     * @param {Object} config - Biome configuration
+     */
+    registerBiome(name, config = {}) {
+        // Add to distribution if not exists
+        if (!this.distribution.hasOwnProperty(name)) {
+            this.distribution[name] = config.weight || 10;
+        }
+
+        // Add to biome specific settings
+        this.biomeSpecificSettings[name] = {
+            enabled: true,
+            vegetation: config.vegetation || 0.5,
+            resources: config.resources || [],
+            structures: config.structures || [],
+            color: config.color || 0x808080,
+            groundVoxel: config.groundVoxel || 1,
+            surfaceVoxel: config.surfaceVoxel || config.groundVoxel || 2,
+            ...config
+        };
+
+        // Register with biome system if it has that capability
+        if (this.biomeSystem && this.biomeSystem.registerBiome) {
+            this.biomeSystem.registerBiome(name, this.biomeSpecificSettings[name]);
+        }
+
+        return this;
     }
 
     setBiomeDistribution(biome, weight) {

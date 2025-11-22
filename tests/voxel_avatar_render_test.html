@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POLYMIR - Voxel Avatar Render Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            overflow: hidden;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+        }
+        #viewport {
+            flex: 1;
+            position: relative;
+        }
+        #canvas { width: 100%; height: 100%; display: block; }
+        #controls {
+            width: 300px;
+            background: #16213e;
+            padding: 15px;
+            overflow-y: auto;
+            border-left: 2px solid #0f3460;
+        }
+        h2 {
+            color: #e94560;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        h3 {
+            color: #aaa;
+            margin: 15px 0 10px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+            color: #888;
+        }
+        select, input[type="range"], button {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 8px;
+            background: #0f3460;
+            color: #fff;
+            border: 1px solid #1a1a4e;
+            border-radius: 4px;
+        }
+        select:focus, input:focus { outline: none; border-color: #e94560; }
+        button {
+            background: #e94560;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background: #ff6b8a; }
+        button.secondary {
+            background: #0f3460;
+            border: 1px solid #e94560;
+        }
+        button.secondary:hover { background: #1a4a80; }
+        .stats {
+            font-family: monospace;
+            font-size: 0.8em;
+            color: #888;
+            line-height: 1.6;
+        }
+        .stats span { color: #4fc3f7; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 0.85em;
+        }
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+        }
+        .palette-color {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .palette-color:hover { border-color: #fff; }
+        .palette-color.selected { border-color: #e94560; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="viewport">
+            <canvas id="canvas"></canvas>
+            <div id="info">
+                <strong>Voxel Avatar Render Test</strong><br>
+                Drag to rotate | Scroll to zoom
+            </div>
+        </div>
+        <div id="controls">
+            <h2>Avatar Rendering</h2>
+
+            <div class="control-group">
+                <h3>Render Mode</h3>
+                <select id="renderMode">
+                    <option value="auto">Auto (Distance-based)</option>
+                    <option value="cube">Cube Mode</option>
+                    <option value="smooth">Smooth Mode</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <h3>Test Avatar</h3>
+                <button id="generateHumanoid">Generate Humanoid</button>
+                <button id="generateRobot" class="secondary">Generate Robot</button>
+                <button id="generateSlime" class="secondary">Generate Slime</button>
+                <button id="clearAvatar" class="secondary">Clear Avatar</button>
+            </div>
+
+            <div class="control-group">
+                <h3>LOD Distance Simulation</h3>
+                <label>Camera Distance: <span id="distanceValue">10</span> units</label>
+                <input type="range" id="lodDistance" min="1" max="150" value="10">
+                <div class="stats">
+                    Current LOD: <span id="currentLOD">FULL</span><br>
+                    Render Mode: <span id="actualRenderMode">smooth</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Palette</h3>
+                <div class="palette-grid" id="paletteGrid"></div>
+            </div>
+
+            <div class="control-group">
+                <h3>Animation</h3>
+                <button id="toggleAnimation">Toggle Animation</button>
+                <label>Rotation Speed</label>
+                <input type="range" id="rotationSpeed" min="0" max="100" value="20">
+            </div>
+
+            <div class="control-group">
+                <h3>Statistics</h3>
+                <div class="stats" id="stats">
+                    Voxels: <span>0</span><br>
+                    Draw Calls: <span>0</span><br>
+                    Triangles: <span>0</span><br>
+                    FPS: <span>0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Import avatar system
+        import { VoxelAvatarData, AVATAR_WIDTH, AVATAR_HEIGHT, AVATAR_DEPTH } from '../src/avatar/data/VoxelAvatarData.js';
+        import { AvatarPalette, COLOR_TYPE } from '../src/avatar/data/AvatarPalette.js';
+        import { VoxelAvatarRig } from '../src/avatar/rig/VoxelAvatarRig.js';
+        import { VoxelAvatarRenderer, RENDER_MODE, VOXEL_SCALE } from '../src/avatar/render/VoxelAvatarRenderer.js';
+        import { AvatarLODController, LOD_LEVEL } from '../src/avatar/render/AvatarLODController.js';
+
+        // Scene setup
+        const canvas = document.getElementById('canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        const camera = new THREE.PerspectiveCamera(60, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
+        camera.position.set(0, 1.5, 3);
+
+        const controls = new OrbitControls(camera, canvas);
+        controls.enableDamping = true;
+        controls.target.set(0, 1, 0);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 5);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        // Ground plane
+        const groundGeometry = new THREE.PlaneGeometry(10, 10);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x333344 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(10, 20, 0x444444, 0x333333);
+        scene.add(gridHelper);
+
+        // Avatar system
+        let avatarData = null;
+        let avatarRig = null;
+        let avatarRenderer = null;
+
+        // State
+        let animating = true;
+        let rotationSpeed = 0.2;
+        const clock = new THREE.Clock();
+        let frameCount = 0;
+        let lastFpsUpdate = 0;
+        let currentFps = 0;
+
+        // Initialize palette display
+        function updatePaletteDisplay(palette) {
+            const grid = document.getElementById('paletteGrid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < palette.size(); i++) {
+                const color = palette.getColor(i);
+                const div = document.createElement('div');
+                div.className = 'palette-color';
+                div.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
+                div.title = `Color ${i}: RGB(${color.r}, ${color.g}, ${color.b})`;
+
+                if (color.type === COLOR_TYPE.EMISSIVE) {
+                    div.style.boxShadow = `0 0 10px rgb(${color.r}, ${color.g}, ${color.b})`;
+                }
+
+                grid.appendChild(div);
+            }
+        }
+
+        // Generate test humanoid avatar
+        function generateHumanoid() {
+            const palette = new AvatarPalette();
+            const data = new VoxelAvatarData({ palette, name: 'Test Humanoid' });
+
+            const skinColor = 0;
+            const hairColor = 2;
+            const eyeColor = 4;
+            const eyeWhite = 5;
+            const shirtColor = 6;
+            const pantsColor = 7;
+            const shoeColor = 9;
+
+            // Head (Y: 56-63, centered)
+            for (let y = 56; y < 64; y++) {
+                for (let x = 12; x < 20; x++) {
+                    for (let z = 12; z < 20; z++) {
+                        // Skip corners for rounder head
+                        const dx = Math.abs(x - 15.5);
+                        const dz = Math.abs(z - 15.5);
+                        if (dx > 3 && dz > 3) continue;
+
+                        data.setVoxel(x, y, z, skinColor);
+                    }
+                }
+            }
+
+            // Hair (top of head)
+            for (let y = 62; y < 64; y++) {
+                for (let x = 11; x < 21; x++) {
+                    for (let z = 11; z < 21; z++) {
+                        if (data.hasVoxel(x, y, z)) continue;
+                        const dx = Math.abs(x - 15.5);
+                        const dz = Math.abs(z - 15.5);
+                        if (dx > 4 && dz > 4) continue;
+                        data.setVoxel(x, y, z, hairColor);
+                    }
+                }
+            }
+
+            // Eyes
+            data.setVoxel(14, 59, 19, eyeWhite);
+            data.setVoxel(17, 59, 19, eyeWhite);
+            data.setVoxel(14, 59, 20, eyeColor);
+            data.setVoxel(17, 59, 20, eyeColor);
+
+            // Neck (Y: 52-55)
+            for (let y = 52; y < 56; y++) {
+                for (let x = 14; x < 18; x++) {
+                    for (let z = 14; z < 18; z++) {
+                        data.setVoxel(x, y, z, skinColor);
+                    }
+                }
+            }
+
+            // Torso (Y: 38-51)
+            for (let y = 38; y < 52; y++) {
+                for (let x = 10; x < 22; x++) {
+                    for (let z = 12; z < 20; z++) {
+                        data.setVoxel(x, y, z, y > 44 ? shirtColor : shirtColor);
+                    }
+                }
+            }
+
+            // Arms (Y: 44-51, X: 4-9 and 23-28)
+            for (let y = 40; y < 52; y++) {
+                // Right arm
+                for (let x = 4; x < 10; x++) {
+                    for (let z = 14; z < 18; z++) {
+                        data.setVoxel(x, y, z, y > 46 ? shirtColor : skinColor);
+                    }
+                }
+                // Left arm
+                for (let x = 22; x < 28; x++) {
+                    for (let z = 14; z < 18; z++) {
+                        data.setVoxel(x, y, z, y > 46 ? shirtColor : skinColor);
+                    }
+                }
+            }
+
+            // Hips (Y: 34-37)
+            for (let y = 34; y < 38; y++) {
+                for (let x = 10; x < 22; x++) {
+                    for (let z = 12; z < 20; z++) {
+                        data.setVoxel(x, y, z, pantsColor);
+                    }
+                }
+            }
+
+            // Legs (Y: 6-33)
+            for (let y = 6; y < 34; y++) {
+                // Right leg
+                for (let x = 10; x < 16; x++) {
+                    for (let z = 13; z < 19; z++) {
+                        data.setVoxel(x, y, z, y < 8 ? shoeColor : pantsColor);
+                    }
+                }
+                // Left leg
+                for (let x = 16; x < 22; x++) {
+                    for (let z = 13; z < 19; z++) {
+                        data.setVoxel(x, y, z, y < 8 ? shoeColor : pantsColor);
+                    }
+                }
+            }
+
+            // Feet (Y: 0-5)
+            for (let y = 0; y < 6; y++) {
+                for (let x = 10; x < 16; x++) {
+                    for (let z = 12; z < 22; z++) {
+                        data.setVoxel(x, y, z, shoeColor);
+                    }
+                }
+                for (let x = 16; x < 22; x++) {
+                    for (let z = 12; z < 22; z++) {
+                        data.setVoxel(x, y, z, shoeColor);
+                    }
+                }
+            }
+
+            return data;
+        }
+
+        // Generate test robot avatar
+        function generateRobot() {
+            const palette = new AvatarPalette([]);
+            palette.addColor(100, 100, 120, COLOR_TYPE.SOLID); // Metal
+            palette.addColor(60, 60, 80, COLOR_TYPE.SOLID);    // Dark metal
+            palette.addColor(200, 50, 50, COLOR_TYPE.EMISSIVE); // Red light
+            palette.addColor(50, 200, 255, COLOR_TYPE.EMISSIVE); // Blue light
+            palette.addColor(180, 180, 200, COLOR_TYPE.SOLID); // Light metal
+            palette.addColor(40, 40, 50, COLOR_TYPE.SOLID);    // Black
+
+            const data = new VoxelAvatarData({ palette, name: 'Robot' });
+
+            // Boxy robot head
+            for (let y = 54; y < 64; y++) {
+                for (let x = 10; x < 22; x++) {
+                    for (let z = 10; z < 22; z++) {
+                        data.setVoxel(x, y, z, 0);
+                    }
+                }
+            }
+
+            // Eyes (emissive)
+            for (let x = 12; x < 15; x++) {
+                data.setVoxel(x, 58, 21, 3);
+                data.setVoxel(x, 59, 21, 3);
+            }
+            for (let x = 17; x < 20; x++) {
+                data.setVoxel(x, 58, 21, 3);
+                data.setVoxel(x, 59, 21, 3);
+            }
+
+            // Body
+            for (let y = 30; y < 54; y++) {
+                for (let x = 8; x < 24; x++) {
+                    for (let z = 10; z < 22; z++) {
+                        data.setVoxel(x, y, z, y % 8 < 4 ? 0 : 1);
+                    }
+                }
+            }
+
+            // Chest light
+            for (let y = 42; y < 48; y++) {
+                for (let x = 14; x < 18; x++) {
+                    data.setVoxel(x, y, 22, 2);
+                }
+            }
+
+            // Arms
+            for (let y = 34; y < 52; y++) {
+                for (let x = 2; x < 8; x++) {
+                    for (let z = 13; z < 19; z++) {
+                        data.setVoxel(x, y, z, 4);
+                    }
+                }
+                for (let x = 24; x < 30; x++) {
+                    for (let z = 13; z < 19; z++) {
+                        data.setVoxel(x, y, z, 4);
+                    }
+                }
+            }
+
+            // Legs
+            for (let y = 0; y < 30; y++) {
+                for (let x = 10; x < 16; x++) {
+                    for (let z = 12; z < 20; z++) {
+                        data.setVoxel(x, y, z, 1);
+                    }
+                }
+                for (let x = 16; x < 22; x++) {
+                    for (let z = 12; z < 20; z++) {
+                        data.setVoxel(x, y, z, 1);
+                    }
+                }
+            }
+
+            return data;
+        }
+
+        // Generate slime avatar
+        function generateSlime() {
+            const palette = new AvatarPalette([]);
+            palette.addColor(100, 255, 150, COLOR_TYPE.TRANSPARENT); // Slime body
+            palette.addColor(50, 200, 100, COLOR_TYPE.SOLID);        // Core
+            palette.addColor(255, 255, 255, COLOR_TYPE.SOLID);       // Eye white
+            palette.addColor(30, 30, 30, COLOR_TYPE.SOLID);          // Eye pupil
+
+            const data = new VoxelAvatarData({ palette, name: 'Slime' });
+
+            // Blob shape using spherical formula
+            const centerX = 16, centerY = 20, centerZ = 16;
+            const radius = 12;
+
+            for (let y = 0; y < 40; y++) {
+                for (let x = 4; x < 28; x++) {
+                    for (let z = 4; z < 28; z++) {
+                        const dx = x - centerX;
+                        const dy = (y - centerY) * 1.2; // Slightly squashed
+                        const dz = z - centerZ;
+                        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                        if (dist < radius) {
+                            data.setVoxel(x, y, z, dist < radius * 0.5 ? 1 : 0);
+                        }
+                    }
+                }
+            }
+
+            // Eyes
+            data.setVoxel(12, 24, 26, 2);
+            data.setVoxel(13, 24, 26, 2);
+            data.setVoxel(12, 25, 26, 2);
+            data.setVoxel(13, 25, 26, 2);
+            data.setVoxel(12, 24, 27, 3);
+
+            data.setVoxel(19, 24, 26, 2);
+            data.setVoxel(20, 24, 26, 2);
+            data.setVoxel(19, 25, 26, 2);
+            data.setVoxel(20, 25, 26, 2);
+            data.setVoxel(20, 24, 27, 3);
+
+            return data;
+        }
+
+        // Initialize avatar
+        function initAvatar(data) {
+            // Remove existing avatar
+            if (avatarRenderer) {
+                scene.remove(avatarRenderer.getObject3D());
+                avatarRenderer.dispose();
+            }
+
+            avatarData = data;
+            avatarRig = new VoxelAvatarRig();
+            avatarRig.initialize(avatarData);
+
+            avatarRenderer = new VoxelAvatarRenderer({
+                renderMode: document.getElementById('renderMode').value
+            });
+
+            const avatarObject = avatarRenderer.initialize(avatarData, avatarRig);
+            scene.add(avatarObject);
+
+            updatePaletteDisplay(avatarData.palette);
+            updateStats();
+        }
+
+        // Update stats display
+        function updateStats() {
+            const stats = document.getElementById('stats');
+            const voxelCount = avatarData ? avatarData.getVoxelCount() : 0;
+            const renderStats = avatarRenderer ? avatarRenderer.updateStats() : { drawCalls: 0, triangles: 0 };
+
+            stats.innerHTML = `
+                Voxels: <span>${voxelCount}</span><br>
+                Draw Calls: <span>${renderStats.drawCalls}</span><br>
+                Triangles: <span>${Math.round(renderStats.triangles)}</span><br>
+                FPS: <span>${currentFps}</span>
+            `;
+        }
+
+        // Event handlers
+        document.getElementById('generateHumanoid').addEventListener('click', () => {
+            initAvatar(generateHumanoid());
+        });
+
+        document.getElementById('generateRobot').addEventListener('click', () => {
+            initAvatar(generateRobot());
+        });
+
+        document.getElementById('generateSlime').addEventListener('click', () => {
+            initAvatar(generateSlime());
+        });
+
+        document.getElementById('clearAvatar').addEventListener('click', () => {
+            if (avatarRenderer) {
+                scene.remove(avatarRenderer.getObject3D());
+                avatarRenderer.dispose();
+                avatarRenderer = null;
+                avatarData = null;
+            }
+            updateStats();
+        });
+
+        document.getElementById('renderMode').addEventListener('change', (e) => {
+            if (avatarRenderer) {
+                avatarRenderer.setRenderMode(e.target.value);
+                updateStats();
+            }
+        });
+
+        document.getElementById('lodDistance').addEventListener('input', (e) => {
+            const distance = parseFloat(e.target.value);
+            document.getElementById('distanceValue').textContent = distance;
+
+            if (avatarRenderer) {
+                const lod = avatarRenderer.lodController.calculateLOD(distance);
+                document.getElementById('currentLOD').textContent = avatarRenderer.lodController.getLODName();
+                document.getElementById('actualRenderMode').textContent = avatarRenderer.lodController.getRecommendedRenderMode();
+            }
+        });
+
+        document.getElementById('toggleAnimation').addEventListener('click', () => {
+            animating = !animating;
+        });
+
+        document.getElementById('rotationSpeed').addEventListener('input', (e) => {
+            rotationSpeed = e.target.value / 100;
+        });
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            const width = canvas.clientWidth;
+            const height = canvas.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const deltaTime = clock.getDelta();
+            frameCount++;
+
+            // FPS counter
+            const now = performance.now();
+            if (now - lastFpsUpdate > 1000) {
+                currentFps = Math.round(frameCount * 1000 / (now - lastFpsUpdate));
+                frameCount = 0;
+                lastFpsUpdate = now;
+                updateStats();
+            }
+
+            // Rotate avatar
+            if (animating && avatarRenderer) {
+                const obj = avatarRenderer.getObject3D();
+                obj.rotation.y += deltaTime * rotationSpeed * Math.PI * 2;
+            }
+
+            // Update avatar renderer
+            if (avatarRenderer) {
+                avatarRenderer.update(camera, deltaTime);
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Start with humanoid
+        initAvatar(generateHumanoid());
+        animate();
+    </script>
+</body>
+</html>

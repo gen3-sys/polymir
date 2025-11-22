@@ -14,10 +14,12 @@ const log = logger.child('WS:Position');
 
 /**
  * Create position update handler
+ * Uses PlayerStateManager for efficient tick-based batching
  * @param {Object} worldServerDB - World Server database adapter
+ * @param {Object} playerStateManager - Real-time state manager (optional, for optimized path)
  * @returns {Function} Handler function
  */
-export function createPositionUpdateHandler(worldServerDB) {
+export function createPositionUpdateHandler(worldServerDB, playerStateManager = null) {
     /**
      * Handle 'position_update' message
      * @param {string} connectionId
@@ -39,6 +41,7 @@ export function createPositionUpdateHandler(worldServerDB) {
         const {
             megachunkId,
             bodyId,
+            shipId,
             positionX,
             positionY,
             positionZ,
@@ -62,7 +65,48 @@ export function createPositionUpdateHandler(worldServerDB) {
         }
 
         try {
-            // Update player position in database
+            // Use PlayerStateManager for optimized tick-based sync if available
+            if (playerStateManager) {
+                // Ensure player is registered (returns null if invalid playerId)
+                // Pass username from clientInfo for display purposes
+                const state = playerStateManager.addPlayer(playerId, connectionId, clientInfo.username);
+                if (!state) {
+                    wsServer.sendToClient(connectionId, {
+                        type: 'error',
+                        error: 'Failed to register player state'
+                    });
+                    return;
+                }
+
+                // Update in-memory state (returns false if validation fails)
+                const updated = playerStateManager.updatePlayer(playerId, {
+                    megachunkId,
+                    bodyId,
+                    shipId,
+                    position: { x: positionX, y: positionY, z: positionZ },
+                    velocity: { x: velocityX || 0, y: velocityY || 0, z: velocityZ || 0 },
+                    rotation: { x: rotationX || 0, y: rotationY || 0, z: rotationZ || 0, w: rotationW || 1 }
+                });
+
+                if (!updated) {
+                    wsServer.sendToClient(connectionId, {
+                        type: 'error',
+                        error: 'Invalid position data (NaN or Infinity)'
+                    });
+                    return;
+                }
+
+                // Quick ack - no DB write, no broadcast (handled by tick)
+                wsServer.sendToClient(connectionId, {
+                    type: 'position_ack',
+                    timestamp: message.timestamp || Date.now(),
+                    sequence: message.sequence
+                });
+
+                return;
+            }
+
+            // Fallback: Direct DB write (legacy path)
             await worldServerDB.upsertPlayerPosition(playerId, {
                 megachunkId: megachunkId || null,
                 bodyId: bodyId || null,
@@ -80,14 +124,14 @@ export function createPositionUpdateHandler(worldServerDB) {
                 websocketConnectionId: connectionId
             });
 
-            log.trace('Position updated', {
+            log.trace('Position updated (legacy)', {
                 playerId,
                 megachunkId,
                 bodyId,
                 position: [positionX, positionY, positionZ]
             });
 
-            // Broadcast position to nearby players
+            // Broadcast position to nearby players (legacy immediate broadcast)
             const broadcastMessage = {
                 type: 'player_position',
                 playerId,
@@ -346,9 +390,10 @@ export function createTeleportHandler(worldServerDB) {
  * Register all position handlers
  * @param {Object} wsServer
  * @param {Object} worldServerDB
+ * @param {Object} playerStateManager - Optional real-time state manager for optimized path
  */
-export function registerPositionHandlers(wsServer, worldServerDB) {
-    wsServer.registerHandler('position_update', createPositionUpdateHandler(worldServerDB));
+export function registerPositionHandlers(wsServer, worldServerDB, playerStateManager = null) {
+    wsServer.registerHandler('position_update', createPositionUpdateHandler(worldServerDB, playerStateManager));
     wsServer.registerHandler('request_positions', createPositionRequestHandler(worldServerDB));
     wsServer.registerHandler('teleport', createTeleportHandler(worldServerDB));
 

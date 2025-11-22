@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Layered Voxel System Test</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #00ff00;
+            border-bottom: 2px solid #00ff00;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            color: #00aaff;
+            margin-top: 30px;
+        }
+
+        .test-section {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .test-result.pass {
+            background: rgba(0, 255, 0, 0.1);
+            border-left: 4px solid #00ff00;
+        }
+
+        .test-result.fail {
+            background: rgba(255, 0, 0, 0.1);
+            border-left: 4px solid #ff0000;
+            color: #ff0000;
+        }
+
+        .test-result.info {
+            background: rgba(0, 170, 255, 0.1);
+            border-left: 4px solid #00aaff;
+            color: #00aaff;
+        }
+
+        pre {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            color: #00ff00;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .stat-box {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #555;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #00ff00;
+        }
+
+        canvas {
+            border: 2px solid #00ff00;
+            background: #000;
+            margin: 20px 0;
+        }
+
+        button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            margin: 5px;
+        }
+
+        button:hover {
+            background: #00cc00;
+        }
+
+        .error-detail {
+            color: #ff6666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧊 Hierarchical Layer System Test Suite</h1>
+
+        <div class="test-section">
+            <h2>Test Results</h2>
+            <div id="test-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>System Statistics</h2>
+            <div class="stats" id="stats"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Visualization</h2>
+            <button onclick="runVisualization()">Run 3D Visualization</button>
+            <button onclick="runExamples()">Generate Examples</button>
+            <canvas id="canvas" width="800" height="600"></canvas>
+            <div id="viz-info"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Debug Output</h2>
+            <pre id="debug-output"></pre>
+        </div>
+    </div>
+
+    <script type="module">
+        import { LayerConfiguration } from '../src/world/LayerConfiguration.js';
+        import { LayeredVoxelData } from '../src/world/LayeredVoxelData.js';
+        import { LayeredMesher } from '../src/geometry/voxel/LayeredMesher.js';
+        import { MVoxFile } from '../src/serialization/formats/MVoxFile.js';
+        import { LayeredSchematicExamples } from '../src/utils/LayeredSchematicExamples.js';
+
+        const results = [];
+        const debugLog = [];
+
+        function log(message) {
+            debugLog.push(message);
+            console.log(message);
+        }
+
+        function test(name, fn) {
+            try {
+                fn();
+                results.push({ name, status: 'pass', message: 'Test passed' });
+                log(`✓ ${name}`);
+            } catch (error) {
+                results.push({ name, status: 'fail', message: error.message, error });
+                log(`✗ ${name}: ${error.message}`);
+                console.error(error);
+            }
+        }
+
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error(message || 'Assertion failed');
+            }
+        }
+
+        function assertClose(a, b, epsilon = 0.0001, message) {
+            if (Math.abs(a - b) > epsilon) {
+                throw new Error(message || `Expected ${a} to be close to ${b}`);
+            }
+        }
+
+        // Test Suite
+        log('=== Starting Layered Voxel System Tests ===\n');
+
+        // Test 1: LayerConfiguration Creation
+        test('LayerConfiguration - Create Simple', () => {
+            const config = LayerConfiguration.createSimple(3, 'microblock');
+            assert(config.layers.length === 3, 'Should create 3 layers');
+            assert(config.layers[0].renderMode === 'block', 'Layer 0 should be block mode');
+            assert(config.layers[1].renderMode === 'microblock', 'Layer 1 should be microblock mode');
+            assert(config.layers[2].renderMode === 'microblock', 'Layer 2 should be microblock mode');
+            log(`  Created config with ${config.layers.length} layers`);
+        });
+
+        // Test 2: Layer Scale Calculation
+        test('LayerConfiguration - Scale Calculation', () => {
+            const config = LayerConfiguration.createSimple(3);
+
+            assertClose(config.getLayer(0).absoluteScale, 1.0, 0.0001, 'Layer 0 scale should be 1.0');
+            assertClose(config.getLayer(1).absoluteScale, 0.0625, 0.0001, 'Layer 1 scale should be 1/16');
+            assertClose(config.getLayer(2).absoluteScale, 0.00390625, 0.0001, 'Layer 2 scale should be 1/256');
+
+            log(`  Layer 0 scale: ${config.getLayer(0).absoluteScale}`);
+            log(`  Layer 1 scale: ${config.getLayer(1).absoluteScale}`);
+            log(`  Layer 2 scale: ${config.getLayer(2).absoluteScale}`);
+        });
+
+        // Test 3: Coordinate Conversion
+        test('LayerConfiguration - Coordinate Conversion', () => {
+            const config = LayerConfiguration.createSimple(2);
+
+            // World pos (1, 2, 3) should map to:
+            // Layer 0: (1, 2, 3)
+            // Layer 1: (16, 32, 48)
+            const worldPos = [1, 2, 3];
+            const layer0Local = config.worldToLayerLocal(worldPos, 0);
+            const layer1Local = config.worldToLayerLocal(worldPos, 1);
+
+            assert(layer0Local[0] === 1 && layer0Local[1] === 2 && layer0Local[2] === 3,
+                'Layer 0 conversion incorrect');
+            assert(layer1Local[0] === 16 && layer1Local[1] === 32 && layer1Local[2] === 48,
+                'Layer 1 conversion incorrect');
+
+            // Test reverse conversion
+            const worldBack = config.layerLocalToWorld(layer1Local, 1);
+            assertClose(worldBack[0], 1, 0.01, 'Reverse conversion X failed');
+            assertClose(worldBack[1], 2, 0.01, 'Reverse conversion Y failed');
+            assertClose(worldBack[2], 3, 0.01, 'Reverse conversion Z failed');
+
+            log(`  World ${JSON.stringify(worldPos)} -> Layer 0 ${JSON.stringify(layer0Local)}`);
+            log(`  World ${JSON.stringify(worldPos)} -> Layer 1 ${JSON.stringify(layer1Local)}`);
+        });
+
+        // Test 4: LayeredVoxelData - Basic Operations
+        test('LayeredVoxelData - Set/Get Voxels', () => {
+            const config = LayerConfiguration.createSimple(2);
+            const data = new LayeredVoxelData(config);
+
+            // Set voxels in different layers
+            data.setVoxel(0, [5, 10, 15], { color: 0xFF0000, semantics: 1 });
+            data.setVoxel(1, [80, 160, 240], { color: 0x00FF00, semantics: 2 });
+
+            // Get them back
+            const voxel0 = data.getVoxel(0, [5, 10, 15]);
+            const voxel1 = data.getVoxel(1, [80, 160, 240]);
+
+            assert(voxel0 !== null, 'Layer 0 voxel should exist');
+            assert(voxel1 !== null, 'Layer 1 voxel should exist');
+            assert(voxel0.color === 0xFF0000, 'Layer 0 color incorrect');
+            assert(voxel1.color === 0x00FF00, 'Layer 1 color incorrect');
+
+            log(`  Layer 0 voxel count: ${data.getLayerMap(0).size}`);
+            log(`  Layer 1 voxel count: ${data.getLayerMap(1).size}`);
+        });
+
+        // Test 5: LayeredVoxelData - Encoding
+        test('LayeredVoxelData - Key Encoding/Decoding', () => {
+            const config = LayerConfiguration.createSimple(1);
+            const data = new LayeredVoxelData(config);
+
+            const testPositions = [
+                [0, 0, 0],
+                [100, 200, 300],
+                [-50, -100, -150],
+                [500, -500, 250]
+            ];
+
+            for (const pos of testPositions) {
+                const key = data.encodeKey(pos[0], pos[1], pos[2]);
+                const decoded = data.decodeKey(key);
+
+                assert(decoded[0] === pos[0] && decoded[1] === pos[1] && decoded[2] === pos[2],
+                    `Encode/decode failed for ${JSON.stringify(pos)}`);
+            }
+
+            log(`  Successfully encoded/decoded ${testPositions.length} positions`);
+        });
+
+        // Test 6: LayeredVoxelData - Statistics
+        test('LayeredVoxelData - Statistics', () => {
+            const config = LayerConfiguration.createSimple(3);
+            const data = new LayeredVoxelData(config);
+
+            // Add voxels to each layer
+            for (let i = 0; i < 10; i++) {
+                data.setVoxel(0, [i, 0, 0], { color: 0xFF0000 });
+            }
+            for (let i = 0; i < 20; i++) {
+                data.setVoxel(1, [i, 0, 0], { color: 0x00FF00 });
+            }
+            for (let i = 0; i < 30; i++) {
+                data.setVoxel(2, [i, 0, 0], { color: 0x0000FF });
+            }
+
+            const stats = data.getStats();
+            assert(stats.totalVoxels === 60, 'Total voxel count incorrect');
+            assert(stats.layerCount === 3, 'Layer count incorrect');
+            assert(stats.layers.length === 3, 'Stats should have 3 layers');
+
+            log(`  Total voxels: ${stats.totalVoxels}`);
+            log(`  Layer count: ${stats.layerCount}`);
+            for (const layer of stats.layers) {
+                log(`    Layer ${layer.index}: ${layer.voxelCount} voxels`);
+            }
+        });
+
+        // Test 7: MVoxFile - Layer Serialization
+        test('MVoxFile - Serialize/Deserialize Layers', () => {
+            const config = LayerConfiguration.createSimple(2);
+            const data = new LayeredVoxelData(config);
+
+            // Add test data
+            data.setVoxel(0, [1, 2, 3], { color: 0xFF0000, semantics: 1 });
+            data.setVoxel(1, [16, 32, 48], { color: 0x00FF00, semantics: 2 });
+
+            // Create MVoxFile
+            const flatMap = data.toFlatMap();
+            const mvoxFile = new MVoxFile('build', flatMap, {
+                name: 'Test Layer File',
+                author: 'Test'
+            });
+            mvoxFile.setLayerConfiguration(config);
+
+            // Serialize
+            const encoded = mvoxFile.encode();
+            assert(encoded.length > 0, 'Encoded data should not be empty');
+
+            // Deserialize
+            const decoded = MVoxFile.decode(encoded);
+            assert(decoded !== null, 'Decoded file should not be null');
+            assert(decoded.layerConfig !== null, 'Layer config should be present');
+            assert(decoded.layerConfig.layers.length === 2, 'Should have 2 layers');
+
+            log(`  Encoded size: ${encoded.length} bytes`);
+            log(`  Decoded layers: ${decoded.layerConfig.layers.length}`);
+        });
+
+        // Test 8: JSON Serialization
+        test('LayerConfiguration - JSON Serialization', () => {
+            const config = LayerConfiguration.createSimple(2);
+
+            // Add some voxels to update counts
+            config.updateVoxelCount(0, 100);
+            config.updateVoxelCount(1, 200);
+
+            // Serialize to JSON
+            const json = config.toJSON();
+            assert(json.layers !== undefined, 'JSON should have layers array');
+            assert(json.layers.length === 2, 'JSON should have 2 layers');
+
+            // Deserialize from JSON
+            const config2 = LayerConfiguration.fromJSON(json);
+            assert(config2.layers.length === 2, 'Deserialized config should have 2 layers');
+            assert(config2.getLayer(0).voxelCount === 100, 'Voxel count should be preserved');
+            assert(config2.getLayer(1).voxelCount === 200, 'Voxel count should be preserved');
+
+            log(`  JSON layers: ${json.layers.length}`);
+            log(`  Voxel counts preserved: ${config2.getLayer(0).voxelCount}, ${config2.getLayer(1).voxelCount}`);
+        });
+
+        // Test 9: Example Generation
+        test('LayeredSchematicExamples - Generate Examples', () => {
+            const examples = new LayeredSchematicExamples();
+
+            const twolayer = examples.generateSimpleTwoLayerCube();
+            assert(twolayer !== null, 'Two-layer example should be created');
+            assert(twolayer.layerConfig !== null, 'Two-layer should have layer config');
+
+            const threeLayer = examples.generateThreeLayerNested();
+            assert(threeLayer !== null, 'Three-layer example should be created');
+
+            const furniture = examples.generateFurnitureWithDetail();
+            assert(furniture !== null, 'Furniture example should be created');
+
+            const mechanism = examples.generateMechanismWithGears();
+            assert(mechanism !== null, 'Mechanism example should be created');
+
+            log(`  Generated 4 example schematics`);
+        });
+
+        // Test 10: LayeredMesher Statistics
+        test('LayeredMesher - Get Statistics', () => {
+            const config = LayerConfiguration.createSimple(2);
+            const data = new LayeredVoxelData(config);
+
+            // Add test voxels
+            for (let x = 0; x < 5; x++) {
+                for (let y = 0; y < 5; y++) {
+                    for (let z = 0; z < 5; z++) {
+                        data.setVoxel(0, [x, y, z], { color: 0xFF0000 });
+                    }
+                }
+            }
+
+            for (let x = 0; x < 8; x++) {
+                for (let y = 0; y < 8; y++) {
+                    for (let z = 0; z < 8; z++) {
+                        data.setVoxel(1, [x, y, z], { color: 0x00FF00 });
+                    }
+                }
+            }
+
+            const stats = LayeredMesher.getStats(data);
+            assert(stats.totalVoxels === 125 + 512, 'Total voxels should be 637');
+            assert(stats.layerStats.length === 2, 'Should have 2 layer stats');
+
+            log(`  Total voxels: ${stats.totalVoxels}`);
+            log(`  Layer 0: ${stats.layerStats[0].voxelCount} voxels`);
+            log(`  Layer 1: ${stats.layerStats[1].voxelCount} voxels`);
+        });
+
+        // Display Results
+        function displayResults() {
+            const resultsDiv = document.getElementById('test-results');
+            const statsDiv = document.getElementById('stats');
+            const debugDiv = document.getElementById('debug-output');
+
+            let passed = 0;
+            let failed = 0;
+
+            resultsDiv.innerHTML = '';
+            results.forEach(result => {
+                const div = document.createElement('div');
+                div.className = `test-result ${result.status}`;
+                div.innerHTML = `
+                    <strong>${result.status === 'pass' ? '✓' : '✗'} ${result.name}</strong><br>
+                    ${result.message}
+                    ${result.error ? `<div class="error-detail">${result.error.stack}</div>` : ''}
+                `;
+                resultsDiv.appendChild(div);
+
+                if (result.status === 'pass') passed++;
+                else failed++;
+            });
+
+            // Stats
+            statsDiv.innerHTML = `
+                <div class="stat-box">
+                    <div class="stat-label">Tests Passed</div>
+                    <div class="stat-value">${passed}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Tests Failed</div>
+                    <div class="stat-value" style="color: ${failed > 0 ? '#ff0000' : '#00ff00'}">${failed}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Success Rate</div>
+                    <div class="stat-value">${((passed / results.length) * 100).toFixed(1)}%</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Total Tests</div>
+                    <div class="stat-value">${results.length}</div>
+                </div>
+            `;
+
+            // Debug output
+            debugDiv.textContent = debugLog.join('\n');
+        }
+
+        // Run visualization
+        window.runVisualization = function() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const vizInfo = document.getElementById('viz-info');
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Create test data
+            const config = LayerConfiguration.createSimple(2);
+            const data = new LayeredVoxelData(config);
+
+            // Layer 0: Red cube
+            for (let x = 0; x < 4; x++) {
+                for (let y = 0; y < 4; y++) {
+                    for (let z = 0; z < 4; z++) {
+                        data.setVoxel(0, [x, y, z], { color: 0xFF0000 });
+                    }
+                }
+            }
+
+            // Layer 1: Green details
+            for (let x = 16; x < 24; x++) {
+                for (let y = 16; y < 24; y++) {
+                    for (let z = 16; z < 24; z++) {
+                        if ((x + y + z) % 2 === 0) {
+                            data.setVoxel(1, [x, y, z], { color: 0x00FF00 });
+                        }
+                    }
+                }
+            }
+
+            // Draw 2D projection
+            const voxels = data.getAllVoxelsWorldSpace();
+
+            voxels.forEach(voxel => {
+                const screenX = 200 + voxel.x * 40 + voxel.z * 20;
+                const screenY = 200 + voxel.y * 40 - voxel.z * 10;
+                const size = voxel.renderScale * 40;
+
+                const color = '#' + voxel.color.toString(16).padStart(6, '0');
+                ctx.fillStyle = color;
+                ctx.fillRect(screenX, screenY, size, size);
+                ctx.strokeStyle = '#444';
+                ctx.strokeRect(screenX, screenY, size, size);
+            });
+
+            vizInfo.innerHTML = `
+                <div class="test-result info">
+                    <strong>Visualization Generated</strong><br>
+                    Red: Layer 0 blocks (1m³)<br>
+                    Green: Layer 1 microblocks (0.0625m³)<br>
+                    Total voxels rendered: ${voxels.length}
+                </div>
+            `;
+        };
+
+        // Generate examples
+        window.runExamples = function() {
+            const vizInfo = document.getElementById('viz-info');
+            const examples = new LayeredSchematicExamples();
+            const all = examples.generateAll();
+
+            let html = '<div class="test-result info"><strong>Generated Examples:</strong><br>';
+            all.forEach(ex => {
+                const metadata = ex.file.metadata;
+                html += `<br><strong>${metadata.name}</strong><br>${metadata.description}<br>`;
+            });
+            html += `<br>Total: ${all.examples} files</div>`;
+
+            vizInfo.innerHTML = html;
+        };
+
+        // Run tests and display
+        displayResults();
+
+        log('\n=== All Tests Complete ===');
+
+        // Make functions available globally
+        window.LayerConfiguration = LayerConfiguration;
+        window.LayeredVoxelData = LayeredVoxelData;
+        window.LayeredMesher = LayeredMesher;
+        window.MVoxFile = MVoxFile;
+        window.LayeredSchematicExamples = LayeredSchematicExamples;
+    </script>
+</body>
+</html>
+

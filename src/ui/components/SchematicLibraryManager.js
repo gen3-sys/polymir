@@ -7,6 +7,8 @@
  */
 
 import * as THREE from '../lib/three.module.js';
+import { HTTPAdapter } from '../../io/network/HTTPAdapter.js';
+import { IndexedDBAdapter } from '../../io/storage/IndexedDBAdapter.js';
 
 
 export class SchematicLibraryManager {
@@ -35,7 +37,18 @@ export class SchematicLibraryManager {
 
         this.publicDatabaseUrl = 'https://polymir.io/schematics';
 
+        // Network and storage adapters
+        this.httpAdapter = new HTTPAdapter({
+            baseUrl: engine?.config?.backendUrl || 'http://localhost:3000',
+            playerId: engine?.playerId || null
+        });
+        this.storageAdapter = new IndexedDBAdapter({
+            dbName: 'polymir',
+            storeName: 'schematics'
+        });
 
+
+        this.initializeAdapters();
         this.loadLibrary();
 
 
@@ -46,6 +59,18 @@ export class SchematicLibraryManager {
 
 
         this.loadPublicSchematics();
+    }
+
+    /**
+     * Initialize network and storage adapters
+     */
+    async initializeAdapters() {
+        try {
+            await this.storageAdapter.initialize();
+            console.log('[SchematicLibrary] Storage initialized');
+        } catch (error) {
+            console.error('[SchematicLibrary] Storage initialization failed:', error);
+        }
     }
     
     /**
@@ -188,10 +213,10 @@ export class SchematicLibraryManager {
     async uploadSchematic(file, metadata = {}) {
         try {
             const id = `schematic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            
-            
+
+
             const schematicData = await this.parseSchematicFile(file);
-            
+
             const schematic = {
                 id: id,
                 name: metadata.name || file.name.replace(/\.[^/.]+$/, ''),
@@ -211,22 +236,38 @@ export class SchematicLibraryManager {
                     dimensions: schematicData.size
                 }
             };
-            
-            
+
+
             schematic.thumbnail = this.generateThumbnail(schematicData);
-            
-            
+
+
             this.schematics.set(id, schematic);
-            
-            
+
+
             schematic.tags.forEach(tag => this.tags.add(tag));
-            
-            
+
+
             this.saveLibrary();
-            
+
+            // Upload to backend if player is authenticated
+            try {
+                if (this.httpAdapter.playerId) {
+                    const uploadResult = await this.httpAdapter.uploadSchematic(
+                        id,
+                        schematic.name,
+                        metadata.tags || [],
+                        JSON.stringify(schematicData)
+                    );
+                    console.log('[SchematicLibrary] Uploaded to backend:', uploadResult);
+                    schematic.backendId = uploadResult.schematic.cid;
+                }
+            } catch (backendError) {
+                console.warn('[SchematicLibrary] Backend upload failed (local copy saved):', backendError);
+            }
+
             console.log(`Uploaded schematic: ${schematic.name}`);
             return schematic;
-            
+
         } catch (error) {
             console.error('Failed to upload schematic:', error);
             throw error;
@@ -1266,37 +1307,54 @@ export class SchematicLibraryManager {
     }
     
     /**
-     * Save library to localStorage
+     * Save library to IndexedDB and localStorage (fallback)
      */
-    saveLibrary() {
+    async saveLibrary() {
         try {
             const data = {
                 schematics: Array.from(this.schematics.entries()),
                 categories: Array.from(this.categories),
                 tags: Array.from(this.tags)
             };
+
+            // Save to IndexedDB
+            if (this.storageAdapter && this.storageAdapter.isInitialized) {
+                await this.storageAdapter.set('library', data, { type: 'library' });
+            }
+
+            // Fallback to localStorage
             localStorage.setItem('polymir-schematic-library', JSON.stringify(data));
         } catch (e) {
             console.error('Failed to save library:', e);
         }
     }
-    
+
     /**
-     * Load library from localStorage
+     * Load library from IndexedDB and localStorage (fallback)
      */
-    loadLibrary() {
+    async loadLibrary() {
         try {
-            const saved = localStorage.getItem('polymir-schematic-library');
-            if (saved) {
-                const data = JSON.parse(saved);
+            let data = null;
 
+            // Try loading from IndexedDB first
+            if (this.storageAdapter && this.storageAdapter.isInitialized) {
+                data = await this.storageAdapter.get('library');
+            }
 
+            // Fallback to localStorage
+            if (!data) {
+                const saved = localStorage.getItem('polymir-schematic-library');
+                if (saved) {
+                    data = JSON.parse(saved);
+                }
+            }
+
+            if (data) {
                 if (data.schematics) {
                     data.schematics.forEach(([id, schematic]) => {
                         this.schematics.set(id, schematic);
                     });
                 }
-
 
                 if (data.categories) {
                     data.categories.forEach(cat => this.categories.add(cat));

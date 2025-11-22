@@ -315,6 +315,81 @@ export class WorldServerDB {
     }
 
     /**
+     * Batch upsert player positions (for tick-based persistence)
+     * @param {Array} positions - Array of position records
+     * @returns {Promise<void>}
+     */
+    async batchUpsertPlayerPositions(positions) {
+        if (positions.length === 0) return;
+
+        // Build batch insert with UNNEST for efficiency
+        const playerIds = positions.map(p => p.playerId);
+        const megachunkIds = positions.map(p => p.megachunkId || null);
+        const bodyIds = positions.map(p => p.bodyId || null);
+        const posXs = positions.map(p => p.positionX);
+        const posYs = positions.map(p => p.positionY);
+        const posZs = positions.map(p => p.positionZ);
+        const velXs = positions.map(p => p.velocityX || 0);
+        const velYs = positions.map(p => p.velocityY || 0);
+        const velZs = positions.map(p => p.velocityZ || 0);
+        const rotXs = positions.map(p => p.rotationX || 0);
+        const rotYs = positions.map(p => p.rotationY || 0);
+        const rotZs = positions.map(p => p.rotationZ || 0);
+        const rotWs = positions.map(p => p.rotationW || 1);
+        const isOnlines = positions.map(p => p.isOnline !== false);
+        const connIds = positions.map(p => p.websocketConnectionId || null);
+
+        const query = `
+            INSERT INTO player_positions (
+                player_id, megachunk_id, body_id,
+                position_x, position_y, position_z,
+                velocity_x, velocity_y, velocity_z,
+                rotation_x, rotation_y, rotation_z, rotation_w,
+                is_online, websocket_connection_id, last_position_update
+            )
+            SELECT * FROM UNNEST(
+                $1::uuid[], $2::uuid[], $3::uuid[],
+                $4::real[], $5::real[], $6::real[],
+                $7::real[], $8::real[], $9::real[],
+                $10::real[], $11::real[], $12::real[], $13::real[],
+                $14::boolean[], $15::text[]
+            ) AS t(
+                player_id, megachunk_id, body_id,
+                position_x, position_y, position_z,
+                velocity_x, velocity_y, velocity_z,
+                rotation_x, rotation_y, rotation_z, rotation_w,
+                is_online, websocket_connection_id
+            ), NOW() AS last_position_update
+            ON CONFLICT (player_id) DO UPDATE
+            SET megachunk_id = EXCLUDED.megachunk_id,
+                body_id = EXCLUDED.body_id,
+                position_x = EXCLUDED.position_x,
+                position_y = EXCLUDED.position_y,
+                position_z = EXCLUDED.position_z,
+                velocity_x = EXCLUDED.velocity_x,
+                velocity_y = EXCLUDED.velocity_y,
+                velocity_z = EXCLUDED.velocity_z,
+                rotation_x = EXCLUDED.rotation_x,
+                rotation_y = EXCLUDED.rotation_y,
+                rotation_z = EXCLUDED.rotation_z,
+                rotation_w = EXCLUDED.rotation_w,
+                is_online = EXCLUDED.is_online,
+                websocket_connection_id = EXCLUDED.websocket_connection_id,
+                last_position_update = NOW()
+        `;
+
+        await this.pool.query(query, [
+            playerIds, megachunkIds, bodyIds,
+            posXs, posYs, posZs,
+            velXs, velYs, velZs,
+            rotXs, rotYs, rotZs, rotWs,
+            isOnlines, connIds
+        ]);
+
+        this.log.debug(`Batch upserted ${positions.length} player positions`);
+    }
+
+    /**
      * Get player position
      * @param {string} playerId
      * @returns {Promise<Object|null>}

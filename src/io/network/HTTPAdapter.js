@@ -6,16 +6,26 @@
  */
 
 import { NetworkAdapter, NetworkEvents } from './NetworkAdapter.js';
-import { Logger } from '../../debug/Logger.js';
 
-const log = new Logger('HTTPAdapter');
+// Simple console logger for browser compatibility
+const log = {
+    info: (...args) => console.log('[HTTPAdapter]', ...args),
+    error: (...args) => console.error('[HTTPAdapter]', ...args),
+    warn: (...args) => console.warn('[HTTPAdapter]', ...args),
+    debug: (...args) => console.debug('[HTTPAdapter]', ...args)
+};
 
 // =============================================
 // HTTP ADAPTER
 // =============================================
 
 export class HTTPAdapter extends NetworkAdapter {
-    constructor(config = {}) {
+    constructor(configOrUrl = {}) {
+        // Support passing just URL string or config object
+        const config = typeof configOrUrl === 'string'
+            ? { baseUrl: configOrUrl }
+            : configOrUrl;
+
         super(config);
 
         this.baseUrl = config.baseUrl || 'http://localhost:3000';
@@ -164,18 +174,21 @@ export class HTTPAdapter extends NetworkAdapter {
     // PLAYER API
     // =============================================
 
-    async registerPlayer(username, password) {
-        return await this.request('POST', '/api/players/register', {
-            username,
-            password
-        });
+    async registerPlayer(username, password = null) {
+        const body = { username };
+        if (password) body.password = password;
+        return await this.request('POST', '/api/players/register', body);
     }
 
-    async loginPlayer(username, password) {
-        const response = await this.request('POST', '/api/players/login', {
-            username,
-            password
-        });
+    // Alias for registerPlayer
+    async register(username, password = null) {
+        return this.registerPlayer(username, password);
+    }
+
+    async loginPlayer(username, password = null) {
+        const body = { username };
+        if (password) body.password = password;
+        const response = await this.request('POST', '/api/players/login', body);
 
         // Store player ID for authenticated requests
         if (response.player && response.player.playerId) {
@@ -183,6 +196,11 @@ export class HTTPAdapter extends NetworkAdapter {
         }
 
         return response;
+    }
+
+    // Alias for loginPlayer
+    async login(username, password = null) {
+        return this.loginPlayer(username, password);
     }
 
     async getPlayer(playerId) {

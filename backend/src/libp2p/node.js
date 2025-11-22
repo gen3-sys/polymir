@@ -11,16 +11,16 @@
  * - DHT for peer discovery
  */
 
-import { create
-
-Libp2p } from 'libp2p';
+import { createLibp2p } from 'libp2p';
 import { tcp } from '@libp2p/tcp';
 import { webSockets } from '@libp2p/websockets';
 import { noise } from '@libp2p/noise';
 import { mplex } from '@libp2p/mplex';
-import { gossipsub } from '@libp2p/gossipsub';
+import { gossipsub } from '@chainsafe/libp2p-gossipsub';
 import { kadDHT } from '@libp2p/kad-dht';
 import { bootstrap } from '@libp2p/bootstrap';
+import { identify } from '@libp2p/identify';
+import { ping } from '@libp2p/ping';
 import logger from '../utils/logger.js';
 
 const p2pLogger = logger.child('libp2p');
@@ -46,8 +46,8 @@ export async function initializeLibp2p(options = {}) {
         p2pLogger.info('Initializing libp2p node');
 
         const listenAddresses = [
-            process.env.LIBP2P_LISTEN_TCP || '/ip4/0.0.0.0/tcp/4001',
-            process.env.LIBP2P_LISTEN_WS || '/ip4/0.0.0.0/tcp/4002/ws'
+            process.env.LIBP2P_LISTEN_TCP || '/ip4/0.0.0.0/tcp/9001',
+            process.env.LIBP2P_LISTEN_WS || '/ip4/0.0.0.0/tcp/9002/ws'
         ];
 
         const bootstrapNodes = process.env.LIBP2P_BOOTSTRAP_NODES
@@ -75,6 +75,8 @@ export async function initializeLibp2p(options = {}) {
                 })
             ] : [],
             services: {
+                identify: identify(),
+                ping: ping(),
                 pubsub: gossipsub({
                     emitSelf: false, // Don't receive own messages
                     fallbackToFloodsub: true,

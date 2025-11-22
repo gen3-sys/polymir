@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+    <title>Ringworld Terrain Generation + Network Test</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.95);
+            color: #0f0;
+            padding: 15px;
+            border: 2px solid #0f0;
+            font-size: 12px;
+            max-width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        #info h2 {
+            margin: 0 0 10px 0;
+            color: #0ff;
+            font-size: 16px;
+        }
+        #info h3 {
+            margin: 15px 0 5px 0;
+            color: #ff0;
+            font-size: 14px;
+        }
+        .stat {
+            margin: 3px 0;
+            font-size: 11px;
+        }
+        .label {
+            color: #0f0;
+            display: inline-block;
+            width: 140px;
+        }
+        .value {
+            color: #ff0;
+            font-weight: bold;
+        }
+        .section {
+            margin: 10px 0;
+            padding: 8px;
+            background: rgba(0, 50, 0, 0.3);
+            border-left: 3px solid #0f0;
+        }
+        .network-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .network-status.connected {
+            background: #0f0;
+            box-shadow: 0 0 5px #0f0;
+        }
+        .network-status.disconnected {
+            background: #f00;
+        }
+        .network-status.connecting {
+            background: #ff0;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.95);
+            color: #0f0;
+            padding: 12px;
+            border: 2px solid #0f0;
+            font-size: 11px;
+        }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 5px 10px;
+            margin: 3px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 10px;
+        }
+        button:hover {
+            background: #0c0;
+        }
+        button:disabled {
+            background: #555;
+            color: #888;
+            cursor: not-allowed;
+        }
+        /* Settings Modal */
+        #settings-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        #settings-modal.visible {
+            display: flex;
+        }
+        #settings-content {
+            background: rgba(0, 20, 0, 0.95);
+            border: 2px solid #0f0;
+            padding: 20px;
+            max-width: 400px;
+            width: 90%;
+        }
+        #settings-content h2 {
+            color: #0ff;
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+        #settings-content label {
+            display: block;
+            color: #0f0;
+            margin: 10px 0 5px 0;
+            font-size: 12px;
+        }
+        #settings-content input {
+            width: 100%;
+            padding: 8px;
+            background: #000;
+            border: 1px solid #0f0;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            box-sizing: border-box;
+        }
+        #settings-content input:focus {
+            outline: none;
+            border-color: #0ff;
+        }
+        .settings-buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        .settings-buttons button {
+            flex: 1;
+        }
+        .error-text {
+            color: #f00;
+            font-size: 11px;
+            margin-top: 5px;
+            min-height: 14px;
+        }
+        #log {
+            margin-top: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border: 1px solid #0f0;
+        }
+        .log-entry {
+            margin: 2px 0;
+        }
+        .log-info { color: #0ff; }
+        .log-success { color: #0f0; }
+        .log-warning { color: #ff0; }
+        .log-error { color: #f00; }
+
+        /* Chat Panel */
+        #chat-panel {
+            position: absolute;
+            bottom: 80px;
+            right: 10px;
+            width: 350px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #0f0;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+        }
+        #chat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            background: rgba(0, 50, 0, 0.5);
+            border-bottom: 1px solid #0f0;
+        }
+        #chat-header h4 {
+            margin: 0;
+            color: #0ff;
+            font-size: 13px;
+        }
+        .chat-header-btns {
+            display: flex;
+            gap: 5px;
+        }
+        .chat-header-btns button {
+            padding: 3px 8px;
+            font-size: 10px;
+            margin: 0;
+        }
+        #chat-messages {
+            height: 200px;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .chat-msg {
+            padding: 3px 6px;
+            border-radius: 3px;
+            word-wrap: break-word;
+            color: #0f0;
+        }
+        .chat-msg-global { background: rgba(0, 100, 0, 0.2); color: #0f0; }
+        .chat-msg-local { background: rgba(0, 50, 100, 0.2); color: #0cf; }
+        .chat-msg-whisper { background: rgba(100, 0, 100, 0.2); color: #f8f; }
+        .chat-msg-system { background: rgba(100, 100, 0, 0.2); color: #ff0; font-style: italic; }
+        .chat-msg .content { color: #0f0; }
+        .chat-msg .username { color: #0ff; font-weight: bold; margin-right: 5px; }
+        .chat-msg .timestamp { color: #666; font-size: 10px; margin-right: 5px; }
+        .chat-msg.spoiler .content {
+            background: #333;
+            color: transparent;
+            cursor: pointer;
+            padding: 0 4px;
+            border-radius: 2px;
+        }
+        .chat-msg.spoiler.revealed .content {
+            background: transparent;
+            color: #0f0;
+        }
+        #chat-input-area {
+            display: flex;
+            padding: 8px;
+            gap: 5px;
+            border-top: 1px solid rgba(0, 255, 0, 0.3);
+        }
+        #chat-input {
+            flex: 1;
+            background: #000;
+            border: 1px solid #0f0;
+            color: #0f0;
+            padding: 6px 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
+        #chat-input:focus { outline: none; border-color: #0ff; }
+        #chat-send {
+            padding: 6px 12px;
+        }
+        #chat-channel {
+            background: #000;
+            border: 1px solid #0f0;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            padding: 3px;
+        }
+        #chat-panel.minimized #chat-messages,
+        #chat-panel.minimized #chat-input-area {
+            display: none;
+        }
+
+        /* Filter Panel Container */
+        #filter-panel-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 200;
+        }
+    </style>
+</head>
+<body>
+    <!-- Settings Modal -->
+    <div id="settings-modal">
+        <div id="settings-content">
+            <h2>Connection Settings</h2>
+            <label for="username-input">Username:</label>
+            <input type="text" id="username-input" placeholder="Enter your username" maxlength="32">
+            <div class="error-text" id="username-error"></div>
+
+            <label for="server-input">Server URL:</label>
+            <input type="text" id="server-input" value="http://localhost:3000">
+
+            <div class="settings-buttons">
+                <button id="settings-connect">Connect</button>
+                <button id="settings-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">
+        <h2>Ringworld Terrain + Network Test</h2>
+
+        <div class="section">
+            <h3>Terrain Generation</h3>
+            <div class="stat"><span class="label">Ring Radius:</span> <span class="value" id="ring-radius">0</span>m</div>
+            <div class="stat"><span class="label">Tube Radius:</span> <span class="value" id="tube-radius">0</span>m</div>
+            <div class="stat"><span class="label">Chunks Generated:</span> <span class="value" id="chunk-count">0</span></div>
+        </div>
+
+        <div class="section">
+            <h3>Network Status</h3>
+            <div class="stat">
+                <span class="network-status" id="http-status"></span>
+                <span class="label">HTTP API:</span>
+                <span class="value" id="http-text">Disconnected</span>
+            </div>
+            <div class="stat">
+                <span class="network-status" id="ws-status"></span>
+                <span class="label">WebSocket:</span>
+                <span class="value" id="ws-text">Disconnected</span>
+            </div>
+            <div class="stat"><span class="label">Player ID:</span> <span class="value" id="player-id">None</span></div>
+            <div class="stat"><span class="label">Nearby Players:</span> <span class="value" id="nearby-count">0</span></div>
+            <button id="connect-btn">Connect to Server</button>
+            <button id="disconnect-btn" disabled>Disconnect</button>
+        </div>
+
+        <div class="section">
+            <h3>Player Status</h3>
+            <div class="stat"><span class="label">Position:</span> <span class="value" id="player-pos">0, 0, 0</span></div>
+            <div class="stat"><span class="label">Surface Distance:</span> <span class="value" id="surface-dist">0.0</span>m</div>
+            <div class="stat"><span class="label">Grounded:</span> <span class="value" id="grounded">No</span></div>
+        </div>
+
+        <div class="section">
+            <h3>Performance</h3>
+            <div class="stat"><span class="label">FPS:</span> <span class="value" id="fps">60</span></div>
+        </div>
+
+        <div id="log"></div>
+    </div>
+
+    <div id="controls">
+        <strong>Controls:</strong><br>
+        WASD - Move | Space - Jump | R - Sprint<br>
+        Mouse - Look Around | ESC - Release Mouse<br>
+        <br>
+        <strong>View:</strong><br>
+        1 - Toggle Wireframe | 2 - Toggle Bending | 3 - Reset Position
+    </div>
+
+    <!-- Chat Panel -->
+    <div id="chat-panel">
+        <div id="chat-header">
+            <h4>Chat</h4>
+            <div class="chat-header-btns">
+                <select id="chat-channel">
+                    <option value="global">Global</option>
+                    <option value="local">Local</option>
+                </select>
+                <button id="chat-filter-btn" title="Filter Settings">Filter</button>
+                <button id="chat-minimize-btn">_</button>
+            </div>
+        </div>
+        <div id="chat-messages"></div>
+        <div id="chat-input-area">
+            <input type="text" id="chat-input" placeholder="Type a message..." maxlength="500">
+            <button id="chat-send">Send</button>
+        </div>
+    </div>
+
+    <!-- Filter Panel Container (populated by ChatFilterPanel) -->
+    <div id="filter-panel-container"></div>
+
+    <script type="module">
+        /**
+         * RINGWORLD TERRAIN GENERATION + NETWORK TEST
+         *
+         * Uses shader-based torus bending from RingworldGenerator
+         * with quaternion camera system for proper curved surface navigation.
+         */
+
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+        import { RingworldGenerator } from '../src/generation/generators/RingworldGenerator.js';
+        import { HTTPAdapter } from '../src/io/network/HTTPAdapter.js';
+        import { WebSocketAdapter } from '../src/io/network/WebSocketAdapter.js';
+        import { ChatFilterPanel } from '../src/ui/components/ChatFilterPanel.js';
+
+        // ===================================================================
+        // LOGGING SYSTEM
+        // ===================================================================
+        const logContainer = document.getElementById('log');
+        const logs = [];
+        const MAX_LOGS = 50;
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.unshift({ time: timestamp, message, type });
+            if (logs.length > MAX_LOGS) logs.pop();
+
+            logContainer.innerHTML = logs.map(l =>
+                `<div class="log-entry log-${l.type}">[${l.time}] ${l.message}</div>`
+            ).join('');
+
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // ===================================================================
+        // CHAT SYSTEM (must be before network handlers that use it)
+        // ===================================================================
+        const chatMessagesEl = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const chatSendBtn = document.getElementById('chat-send');
+        const chatChannelSelect = document.getElementById('chat-channel');
+        const chatFilterBtn = document.getElementById('chat-filter-btn');
+        const chatMinimizeBtn = document.getElementById('chat-minimize-btn');
+        const chatPanel = document.getElementById('chat-panel');
+        const filterPanelContainer = document.getElementById('filter-panel-container');
+
+        let chatFilterPanel = null;
+        const MAX_CHAT_MESSAGES = 100;
+
+        function addChatMessage(data) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-msg chat-msg-${data.channel || 'global'}`;
+
+            if (data.spoiler) {
+                msgDiv.classList.add('spoiler');
+                msgDiv.onclick = () => msgDiv.classList.add('revealed');
+            }
+
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            msgDiv.innerHTML = `<span class="timestamp">${time}</span>` +
+                (data.username ? `<span class="username">${escapeHtml(data.username)}:</span>` : '') +
+                `<span class="content">${escapeHtml(data.text)}</span>`;
+
+            chatMessagesEl.appendChild(msgDiv);
+
+            // Limit messages
+            while (chatMessagesEl.children.length > MAX_CHAT_MESSAGES) {
+                chatMessagesEl.removeChild(chatMessagesEl.firstChild);
+            }
+
+            // Auto-scroll
+            chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+        }
+
+        function sendChatMessage() {
+            const text = chatInput.value.trim();
+            if (!text) {
+                log('Enter a message to send', 'warning');
+                return;
+            }
+
+            // Debug: check connection state
+            console.log('sendChatMessage - wsAdapter:', wsAdapter, 'isConnected:', wsAdapter?.isConnected);
+
+            if (!wsAdapter || !wsAdapter.isConnected) {
+                log(`Not connected (wsAdapter: ${!!wsAdapter}, isConnected: ${wsAdapter?.isConnected})`, 'warning');
+                // Show message locally anyway for testing
+                addChatMessage({
+                    username: 'You (offline)',
+                    text: text,
+                    channel: chatChannelSelect.value
+                });
+                chatInput.value = '';
+                return;
+            }
+
+            const channel = chatChannelSelect.value;
+
+            // Show message locally immediately (server will also echo back with 'self: true')
+            addChatMessage({
+                username: currentPlayer?.username || 'You',
+                text: text,
+                channel: channel
+            });
+
+            wsAdapter.send({
+                type: 'chat',
+                content: text,
+                channel: channel
+            });
+
+            chatInput.value = '';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function initChatFilterPanel() {
+            if (!chatFilterPanel && wsAdapter) {
+                chatFilterPanel = new ChatFilterPanel(filterPanelContainer, wsAdapter);
+            } else if (wsAdapter && chatFilterPanel) {
+                chatFilterPanel.setWebSocket(wsAdapter);
+            }
+        }
+
+        // Chat UI event listeners
+        chatSendBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendChatMessage();
+            }
+        });
+        // Prevent pointer lock when clicking chat input
+        chatInput.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        chatPanel.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        chatMinimizeBtn.addEventListener('click', () => {
+            chatPanel.classList.toggle('minimized');
+            chatMinimizeBtn.textContent = chatPanel.classList.contains('minimized') ? '+' : '_';
+        });
+        chatFilterBtn.addEventListener('click', () => {
+            if (chatFilterPanel) {
+                chatFilterPanel.toggle();
+            } else if (wsAdapter && wsAdapter.isConnected) {
+                initChatFilterPanel();
+                chatFilterPanel.show();
+            } else {
+                log('Connect to server first to access filter settings', 'warning');
+            }
+        });
+
+        // ===================================================================
+        // NETWORK SETUP
+        // ===================================================================
+        const STORAGE_KEY = 'polymir_ringworld_settings';
+        const DEFAULT_SETTINGS = {
+            username: '',
+            serverUrl: 'http://localhost:3000'
+        };
+
+        // Derive WebSocket URL from HTTP URL (same host, port + 1)
+        function deriveWsUrl(httpUrl) {
+            try {
+                const url = new URL(httpUrl);
+                const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+                const port = parseInt(url.port || (url.protocol === 'https:' ? '443' : '80'), 10);
+                return `${wsProtocol}//${url.hostname}:${port + 1}`;
+            } catch (e) {
+                return 'ws://localhost:3001';
+            }
+        }
+
+        let httpAdapter = null;
+        let wsAdapter = null;
+        let currentPlayer = null;
+        let nearbyPlayers = new Map();
+        let positionUpdateInterval = null;
+
+        // Settings persistence
+        function loadSettings() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+                }
+            } catch (e) {
+                console.warn('Failed to load settings:', e);
+            }
+            return { ...DEFAULT_SETTINGS };
+        }
+
+        function saveSettings(settings) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+            } catch (e) {
+                console.warn('Failed to save settings:', e);
+            }
+        }
+
+        // Settings modal elements
+        const settingsModal = document.getElementById('settings-modal');
+        const usernameInput = document.getElementById('username-input');
+        const serverInput = document.getElementById('server-input');
+        const usernameError = document.getElementById('username-error');
+
+        function showSettingsModal() {
+            const settings = loadSettings();
+            usernameInput.value = settings.username;
+            serverInput.value = settings.serverUrl;
+            usernameError.textContent = '';
+            settingsModal.classList.add('visible');
+            usernameInput.focus();
+        }
+
+        function hideSettingsModal() {
+            settingsModal.classList.remove('visible');
+        }
+
+        function validateUsername(username) {
+            if (!username || username.trim().length === 0) {
+                return 'Username is required';
+            }
+            if (username.length < 3) {
+                return 'Username must be at least 3 characters';
+            }
+            if (username.length > 32) {
+                return 'Username must be 32 characters or less';
+            }
+            if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+                return 'Only letters, numbers, underscore, hyphen allowed';
+            }
+            return null;
+        }
+
+        async function connectToServer() {
+            const username = usernameInput.value.trim();
+            const serverUrl = serverInput.value.trim();
+
+            const validationError = validateUsername(username);
+            if (validationError) {
+                usernameError.textContent = validationError;
+                return;
+            }
+
+            saveSettings({ username, serverUrl });
+            hideSettingsModal();
+
+            const wsUrl = deriveWsUrl(serverUrl);
+
+            try {
+                log('Connecting to server...', 'info');
+                updateNetworkStatus('http', 'connecting');
+                updateNetworkStatus('ws', 'connecting');
+
+                httpAdapter = new HTTPAdapter(serverUrl);
+
+                log(`Joining as ${username}...`, 'info');
+
+                // IRC-style auth: Try register first (creates guest if new), then login
+                // No password = guest mode, anyone can reclaim the name
+                try {
+                    // Try to register (will succeed for new users or reclaim guest accounts)
+                    const registerResult = await httpAdapter.register(username);
+                    currentPlayer = registerResult.player;
+                    if (currentPlayer.isGuest) {
+                        log('Joined as guest (no passphrase set)', 'success');
+                    } else {
+                        log('Registered successfully', 'success');
+                    }
+                } catch (e) {
+                    // If username is protected, try login without password first
+                    // (will fail if protected, but that's expected)
+                    try {
+                        const loginResult = await httpAdapter.login(username);
+                        currentPlayer = loginResult.player;
+                        log('Logged in successfully', 'success');
+                    } catch (loginError) {
+                        // Username is protected - need passphrase
+                        if (loginError.message?.includes('passphrase')) {
+                            log('This username requires a passphrase', 'warning');
+                            // TODO: Show passphrase input dialog
+                            throw new Error('Username is protected. Passphrase required.');
+                        }
+                        throw loginError;
+                    }
+                }
+
+                document.getElementById('player-id').textContent = currentPlayer.username;
+                document.getElementById('http-text').textContent = 'Connected';
+                updateNetworkStatus('http', 'connected');
+
+                await connectWebSocket(wsUrl);
+
+                document.getElementById('connect-btn').disabled = true;
+                document.getElementById('disconnect-btn').disabled = false;
+
+                log('Connected to server', 'success');
+
+            } catch (error) {
+                log(`Connection failed: ${error.message}`, 'error');
+                updateNetworkStatus('http', 'disconnected');
+                updateNetworkStatus('ws', 'disconnected');
+            }
+        }
+
+        async function connectWebSocket(wsUrl) {
+            try {
+                log(`Connecting WebSocket to ${wsUrl}...`, 'info');
+                wsAdapter = new WebSocketAdapter({ url: wsUrl });
+
+                wsAdapter.on('connected', () => {
+                    log('WebSocket open, waiting for welcome...', 'info');
+                });
+
+                wsAdapter.on('disconnected', () => {
+                    log('WebSocket disconnected', 'warning');
+                    document.getElementById('ws-text').textContent = 'Disconnected';
+                    updateNetworkStatus('ws', 'disconnected');
+                    stopPositionUpdates();
+                });
+
+                wsAdapter.on('error', (err) => {
+                    log(`WebSocket error: ${err?.message || 'Connection refused'}`, 'error');
+                });
+
+                wsAdapter.on('message', handleWebSocketMessage);
+
+                // connect() resolves when server sends 'welcome' message
+                await wsAdapter.connect();
+
+                // If we get here, welcome was received
+                log('WebSocket connected', 'success');
+                document.getElementById('ws-text').textContent = 'Connected';
+                updateNetworkStatus('ws', 'connected');
+
+                // Authenticate with playerId
+                if (currentPlayer && currentPlayer.playerId) {
+                    wsAdapter.send({ type: 'authenticate', playerId: currentPlayer.playerId });
+                }
+
+                // Request chat history
+                wsAdapter.send({ type: 'chat_history', limit: 50 });
+
+                startPositionUpdates();
+
+            } catch (error) {
+                log(`WebSocket failed: ${error.message}`, 'error');
+                document.getElementById('ws-text').textContent = 'Failed';
+                updateNetworkStatus('ws', 'disconnected');
+            }
+        }
+
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'player_joined': {
+                    // Server sends { player: { playerId, position, ... } }
+                    const player = data.player || data;
+                    const playerId = player.playerId || data.playerId;
+                    const username = player.username || data.username || playerId?.slice(0, 8) || 'Unknown';
+                    const position = player.position || data.position || { x: 0, y: 0, z: 0 };
+
+                    log(`Player joined: ${username}`, 'info');
+                    nearbyPlayers.set(playerId, { username, position });
+                    updateNearbyCount();
+                    addChatMessage({
+                        text: `${username} joined the game`,
+                        channel: 'system'
+                    });
+                    break;
+                }
+
+                case 'player_left': {
+                    const playerId = data.playerId || data.player?.playerId;
+                    const leftPlayer = nearbyPlayers.get(playerId);
+                    const username = leftPlayer?.username || playerId?.slice(0, 8) || 'Unknown';
+                    if (playerId) {
+                        log(`Player left: ${username}`, 'info');
+                        nearbyPlayers.delete(playerId);
+                        updateNearbyCount();
+                        addChatMessage({
+                            text: `${username} left the game`,
+                            channel: 'system'
+                        });
+                    }
+                    break;
+                }
+
+                case 'position_update':
+                    if (nearbyPlayers.has(data.playerId)) {
+                        nearbyPlayers.get(data.playerId).position = data.position;
+                    }
+                    break;
+
+                case 'players_nearby':
+                    nearbyPlayers.clear();
+                    if (data.players) {
+                        for (const p of data.players) {
+                            nearbyPlayers.set(p.id, {
+                                username: p.username,
+                                position: p.position || { x: 0, y: 0, z: 0 }
+                            });
+                        }
+                    }
+                    updateNearbyCount();
+                    break;
+
+                case 'auth_success':
+                    log('WebSocket authenticated', 'success');
+                    initChatFilterPanel();
+                    break;
+
+                case 'error':
+                    log(`Server error: ${data.message}`, 'error');
+                    break;
+
+                // Chat messages
+                case 'chat':
+                    // Skip if this is our own message echoed back (we already showed it locally)
+                    if (data.self) break;
+
+                    addChatMessage({
+                        username: data.username,
+                        text: data.content,
+                        channel: data.channel || 'global',
+                        spoiler: data.spoiler
+                    });
+                    break;
+
+                case 'chat_blocked':
+                    log(`Chat blocked: ${data.reason}`, 'warning');
+                    break;
+
+                case 'chat_history':
+                    // Load chat history on connect
+                    if (data.messages && Array.isArray(data.messages)) {
+                        log(`Loading ${data.messages.length} messages from history`, 'info');
+                        for (const msg of data.messages) {
+                            addChatMessage({
+                                username: msg.username,
+                                text: msg.content,
+                                channel: msg.channel || 'global',
+                                spoiler: msg.spoiler
+                            });
+                        }
+                    }
+                    break;
+
+                // Filter responses (handled by ChatFilterPanel)
+                case 'filter_config':
+                case 'filter_words':
+                case 'filter_word_added':
+                case 'filter_word_removed':
+                case 'filter_word_whitelisted':
+                case 'filter_mode_set':
+                case 'filter_toggled':
+                case 'filter_test_result':
+                    // ChatFilterPanel handles these via its own message handler
+                    break;
+            }
+        }
+
+        function startPositionUpdates() {
+            stopPositionUpdates();
+            positionUpdateInterval = setInterval(() => {
+                if (wsAdapter && wsAdapter.isConnected && playerPos) {
+                    wsAdapter.send({
+                        type: 'position_update',
+                        positionX: playerPos.x,
+                        positionY: playerPos.y,
+                        positionZ: playerPos.z
+                    });
+                }
+            }, 100);
+        }
+
+        function stopPositionUpdates() {
+            if (positionUpdateInterval) {
+                clearInterval(positionUpdateInterval);
+                positionUpdateInterval = null;
+            }
+        }
+
+        function updateNearbyCount() {
+            document.getElementById('nearby-count').textContent = nearbyPlayers.size;
+        }
+
+        function disconnectFromServer() {
+            stopPositionUpdates();
+
+            if (wsAdapter) {
+                wsAdapter.disconnect();
+                wsAdapter = null;
+            }
+
+            httpAdapter = null;
+            currentPlayer = null;
+            nearbyPlayers.clear();
+
+            updateNetworkStatus('http', 'disconnected');
+            updateNetworkStatus('ws', 'disconnected');
+            document.getElementById('player-id').textContent = 'None';
+            document.getElementById('nearby-count').textContent = '0';
+            document.getElementById('connect-btn').disabled = false;
+            document.getElementById('disconnect-btn').disabled = true;
+
+            log('Disconnected from server', 'info');
+        }
+
+        function updateNetworkStatus(type, status) {
+            const statusEl = document.getElementById(type + '-status');
+            const textEl = document.getElementById(type + '-text');
+
+            statusEl.className = 'network-status ' + status;
+
+            if (status === 'connecting') {
+                textEl.textContent = 'Connecting...';
+            } else if (status === 'disconnected') {
+                textEl.textContent = 'Disconnected';
+            } else if (status === 'connected') {
+                textEl.textContent = 'Connected';
+            }
+        }
+
+        // Event listeners
+        document.getElementById('connect-btn').addEventListener('click', showSettingsModal);
+        document.getElementById('disconnect-btn').addEventListener('click', disconnectFromServer);
+        document.getElementById('settings-connect').addEventListener('click', connectToServer);
+        document.getElementById('settings-cancel').addEventListener('click', hideSettingsModal);
+        usernameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') connectToServer();
+        });
+
+        // Load saved settings on startup
+        const savedSettings = loadSettings();
+        if (savedSettings.username) {
+            usernameInput.value = savedSettings.username;
+        }
+
+        // ===================================================================
+        // THREE.JS SCENE SETUP
+        // ===================================================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000011);
+        // No fog - see the entire ringworld
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 50000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting - ambient only, star provides main light
+        const ambientLight = new THREE.AmbientLight(0x202030, 0.5);
+        scene.add(ambientLight);
+
+        // ===================================================================
+        // CENTRAL STAR - Raymarched glowing sun at center of ringworld
+        // ===================================================================
+        const STAR_RADIUS = 800;  // Big glowing star
+        let starMesh = null;
+        let starGlow = null;
+        let ringworldRotation = 0;
+        const ROTATION_SPEED = 0.001;  // Radians per second - slow majestic rotation
+
+        function createCentralStar() {
+            // Core star geometry
+            const starGeometry = new THREE.SphereGeometry(STAR_RADIUS, 64, 64);
+
+            // Raymarched star shader with glow
+            const starMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    uTime: { value: 0 },
+                    uStarColor: { value: new THREE.Color(0xFFDD44) },
+                    uGlowColor: { value: new THREE.Color(0xFF8800) }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    varying vec2 vUv;
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        vPosition = position;
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float uTime;
+                    uniform vec3 uStarColor;
+                    uniform vec3 uGlowColor;
+                    varying vec3 vNormal;
+                    varying vec3 vPosition;
+                    varying vec2 vUv;
+
+                    // Simplex noise for surface detail
+                    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+                    vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+                    vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+                    float snoise(vec3 v) {
+                        const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+                        const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+                        vec3 i = floor(v + dot(v, C.yyy));
+                        vec3 x0 = v - i + dot(i, C.xxx);
+                        vec3 g = step(x0.yzx, x0.xyz);
+                        vec3 l = 1.0 - g;
+                        vec3 i1 = min(g.xyz, l.zxy);
+                        vec3 i2 = max(g.xyz, l.zxy);
+                        vec3 x1 = x0 - i1 + C.xxx;
+                        vec3 x2 = x0 - i2 + C.yyy;
+                        vec3 x3 = x0 - D.yyy;
+                        i = mod289(i);
+                        vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+                        float n_ = 0.142857142857;
+                        vec3 ns = n_ * D.wyz - D.xzx;
+                        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                        vec4 x_ = floor(j * ns.z);
+                        vec4 y_ = floor(j - 7.0 * x_);
+                        vec4 x = x_ *ns.x + ns.yyyy;
+                        vec4 y = y_ *ns.x + ns.yyyy;
+                        vec4 h = 1.0 - abs(x) - abs(y);
+                        vec4 b0 = vec4(x.xy, y.xy);
+                        vec4 b1 = vec4(x.zw, y.zw);
+                        vec4 s0 = floor(b0)*2.0 + 1.0;
+                        vec4 s1 = floor(b1)*2.0 + 1.0;
+                        vec4 sh = -step(h, vec4(0.0));
+                        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+                        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+                        vec3 p0 = vec3(a0.xy,h.x);
+                        vec3 p1 = vec3(a0.zw,h.y);
+                        vec3 p2 = vec3(a1.xy,h.z);
+                        vec3 p3 = vec3(a1.zw,h.w);
+                        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+                        p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+                        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                        m = m * m;
+                        return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+                    }
+
+                    void main() {
+                        // Animated surface noise
+                        vec3 noisePos = vPosition * 0.003 + vec3(uTime * 0.1);
+                        float noise1 = snoise(noisePos) * 0.5 + 0.5;
+                        float noise2 = snoise(noisePos * 2.0 + 100.0) * 0.5 + 0.5;
+                        float noise3 = snoise(noisePos * 4.0 + 200.0) * 0.5 + 0.5;
+
+                        // Combine noise layers for turbulent surface
+                        float turbulence = noise1 * 0.5 + noise2 * 0.3 + noise3 * 0.2;
+
+                        // Fresnel glow at edges
+                        float fresnel = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.0);
+
+                        // Mix colors based on turbulence
+                        vec3 coreColor = mix(uStarColor, vec3(1.0, 1.0, 0.9), turbulence * 0.5);
+                        vec3 edgeColor = mix(uGlowColor, vec3(1.0, 0.3, 0.0), turbulence);
+
+                        vec3 finalColor = mix(coreColor, edgeColor, fresnel * 0.7);
+
+                        // Add bright spots (solar flares)
+                        float flare = pow(noise3, 3.0) * 2.0;
+                        finalColor += vec3(1.0, 0.9, 0.5) * flare;
+
+                        // HDR-like bloom
+                        finalColor = finalColor * 1.5;
+
+                        gl_FragColor = vec4(finalColor, 1.0);
+                    }
+                `,
+                side: THREE.FrontSide
+            });
+
+            starMesh = new THREE.Mesh(starGeometry, starMaterial);
+            starMesh.position.set(0, 0, 0);  // Center of ringworld
+            scene.add(starMesh);
+
+            // Volumetric glow sprite
+            const glowGeometry = new THREE.SphereGeometry(STAR_RADIUS * 2.5, 32, 32);
+            const glowMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    uTime: { value: 0 }
+                },
+                vertexShader: `
+                    varying vec3 vNormal;
+                    void main() {
+                        vNormal = normalize(normalMatrix * normal);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform float uTime;
+                    varying vec3 vNormal;
+                    void main() {
+                        float intensity = pow(0.7 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+                        vec3 glowColor = vec3(1.0, 0.6, 0.2) * intensity * 0.8;
+                        float alpha = intensity * 0.5;
+                        gl_FragColor = vec4(glowColor, alpha);
+                    }
+                `,
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                side: THREE.BackSide,
+                depthWrite: false
+            });
+
+            starGlow = new THREE.Mesh(glowGeometry, glowMaterial);
+            starGlow.position.set(0, 0, 0);
+            scene.add(starGlow);
+
+            // Point light from star
+            const starLight = new THREE.PointLight(0xFFDD88, 3, 50000);
+            starLight.position.set(0, 0, 0);
+            scene.add(starLight);
+
+            log('Central star created', 'success');
+        }
+
+        createCentralStar();
+
+        // ===================================================================
+        // RINGWORLD GENERATOR
+        // ===================================================================
+        log('Initializing ringworld generator...', 'info');
+
+        const generator = new RingworldGenerator({
+            ringRadius: 6400,      // Massive ring - thalassophobia scale
+            tubeRadius: 80,        // Keep tube relatively thin
+            chunkSize: 16,
+            surfaceDepth: 48,      // Deep terrain for tall mountains
+            seaLevel: 10,          // Ocean level
+            baseHeight: 2,         // Low minimum for deep valleys
+            maxHeight: 44,         // REAL mountains - up to y=44!
+            caveThreshold: 0.52,   // More caves
+            seed: 42
+        });
+
+        document.getElementById('ring-radius').textContent = generator.ringRadius;
+        document.getElementById('tube-radius').textContent = generator.tubeRadius;
+
+        log('Generator created', 'success');
+
+        // ===================================================================
+        // LOAD SHADERS AND INITIALIZE
+        // ===================================================================
+        let vertexShaderSource = '';
+        let fragmentShaderSource = '';
+
+        // Core shaders for curved surface rendering - these are the foundation for all megastructure shaders
+        const vertexShaderPromise = fetch('../src/rendering/shaders/core/curved-surface-voxel.vert.glsl').then(r => r.text());
+        const fragmentShaderPromise = fetch('../src/rendering/shaders/core/curved-surface-voxel.frag.glsl').then(r => r.text());
+
+        Promise.all([vertexShaderPromise, fragmentShaderPromise]).then(([vert, frag]) => {
+            vertexShaderSource = vert;
+
+            // Replace the complex normal transformation with simple fixed lighting
+            // This matches the impostor's lighting exactly
+            frag = frag.replace(
+                'vec3 curvedNormal = transformNormal(vFlatNormal, vFlatPos);',
+                'vec3 curvedNormal = -normalize(vFlatNormal);  // Simple negated normal for inside-torus'
+            );
+
+            fragmentShaderSource = frag;
+            log('Shaders loaded (simplified lighting)', 'success');
+            init();
+        }).catch(err => {
+            log(`Failed to load shaders: ${err.message}`, 'error');
+        });
+
+        // ===================================================================
+        // PLAYER STATE AND PHYSICS
+        // ===================================================================
+        const GRAVITY_STRENGTH = 30;
+        const JUMP_VELOCITY = 25;
+        const MOVE_SPEED = 20;
+
+        let playerPos = new THREE.Vector3();
+        let velocity = new THREE.Vector3(0, 0, 0);
+        let yaw = 0;
+        let pitch = 0;
+        let isGrounded = false;
+
+        const keys = { w: false, s: false, a: false, d: false, space: false, r: false };
+        let showWireframe = true;
+        let enableBending = true;
+        let torusWireframe = null;
+        let chunkGroup = null;
+        let shaderUniforms = null;
+
+        // Effective radii for physics (calculated after chunk generation)
+        let effectiveMajorRadius = generator.ringRadius;
+        let effectiveMinorRadius = generator.tubeRadius;
+
+        function initPlayer() {
+            const startTheta = 0;
+            const startPhi = 0;
+            // Start a bit above the surface to allow falling onto terrain
+            const startR = effectiveMinorRadius + generator.surfaceDepth + 5;
+
+            // Shader torus orientation (Y-up, ring in XZ plane):
+            // x = (R + r*cos(phi)) * cos(theta)
+            // y = r * sin(phi)
+            // z = (R + r*cos(phi)) * sin(theta)
+            playerPos.set(
+                (effectiveMajorRadius + startR * Math.cos(startPhi)) * Math.cos(startTheta),
+                startR * Math.sin(startPhi),
+                (effectiveMajorRadius + startR * Math.cos(startPhi)) * Math.sin(startTheta)
+            );
+
+            velocity.set(0, 0, 0);
+            isGrounded = false;
+            yaw = 0;
+            pitch = 0;
+        }
+
+        // ===================================================================
+        // CHUNK LOADING STATE
+        // ===================================================================
+        const CHUNK_LOAD_RADIUS = 8;      // Load chunks within this radius (in chunks)
+        const CHUNKS_PER_FRAME = 2;       // Max chunks to load per frame
+        let loadedChunks = new Map();     // Loaded chunk meshes by "i_j" key
+        let chunkDataCache = new Map();   // Generated chunk data cache
+        let chunkMaterial = null;
+        let impostorTorus = null;
+        let impostorUniforms = null;
+
+        // ===================================================================
+        // INITIALIZATION
+        // ===================================================================
+        function init() {
+            log('Initializing ringworld...', 'info');
+
+            // Calculate chunk counts for the torus
+            const ringCircumference = 2 * Math.PI * generator.ringRadius;
+            const tubeCircumference = 2 * Math.PI * generator.tubeRadius;
+            generator.numAroundRing = Math.ceil(ringCircumference / generator.chunkSize);
+            generator.numAroundTube = Math.ceil(tubeCircumference / generator.chunkSize);
+
+            // Calculate effective radii for shader and physics
+            effectiveMajorRadius = (generator.numAroundRing * generator.chunkSize) / (2 * Math.PI);
+            effectiveMinorRadius = (generator.numAroundTube * generator.chunkSize) / (2 * Math.PI);
+
+            log(`Ringworld: ${generator.numAroundRing} x ${generator.numAroundTube} chunks`, 'info');
+            log(`Effective radii: major=${effectiveMajorRadius.toFixed(1)}, minor=${effectiveMinorRadius.toFixed(1)}`, 'info');
+
+            document.getElementById('chunk-count').textContent = '0 / ' + (generator.numAroundRing * generator.numAroundTube);
+
+            // Create impostor torus (shows distant terrain as simple colored surface)
+            createImpostorTorus();
+
+            // Create mesh group for chunks - render BEFORE impostor to mark stencil
+            chunkGroup = new THREE.Group();
+            chunkGroup.renderOrder = 0;  // Render first, mark stencil buffer
+            scene.add(chunkGroup);
+
+            // Per-pixel torus mapping shader
+            shaderUniforms = {
+                uPlayerPos: { value: new THREE.Vector3(0, 0, 0) },
+                uSurfaceType: { value: 2 },  // Torus
+                uMajorRadius: { value: effectiveMajorRadius },
+                uMinorRadius: { value: effectiveMinorRadius },
+                uSphereRadius: { value: 0 },
+                uSunDirection: { value: new THREE.Vector3(0.57735, 0.57735, 0.57735) },
+                uViewMatrix: { value: camera.matrixWorldInverse },
+                uProjectionMatrix: { value: camera.projectionMatrix }
+            };
+
+            chunkMaterial = new THREE.ShaderMaterial({
+                vertexShader: vertexShaderSource,
+                fragmentShader: fragmentShaderSource,
+                uniforms: shaderUniforms,
+                side: THREE.FrontSide,
+                transparent: false,
+                depthWrite: true,
+                depthTest: true,
+                stencilWrite: true,
+                stencilFunc: THREE.AlwaysStencilFunc,
+                stencilRef: 1,
+                stencilZPass: THREE.ReplaceStencilOp  // Mark where chunks render
+            });
+
+            // Initialize player and controls
+            initPlayer();
+            initControls();
+            animate();
+
+            log('Ringworld ready! Chunks load around player.', 'success');
+        }
+
+        // ===================================================================
+        // IMPOSTOR TORUS - Terrain-aware low-poly mesh
+        // ===================================================================
+        function createImpostorTorus() {
+            // Sample terrain heights and biomes to create a proper impostor
+            const thetaSegments = 512;  // Around the ring (2x resolution)
+            const phiSegments = 96;     // Around the tube (2x resolution)
+
+            const vertices = [];
+            const colors = [];
+            const indices = [];
+
+            // Use effective radii (already calculated before this is called)
+            const R = effectiveMajorRadius;  // Major radius (ring)
+            const r = effectiveMinorRadius;  // Minor radius (tube)
+
+            log(`Creating impostor: R=${R.toFixed(1)}, r=${r.toFixed(1)}`, 'info');
+
+            // Sample terrain at each vertex
+            for (let ti = 0; ti <= thetaSegments; ti++) {
+                const theta = (ti / thetaSegments) * Math.PI * 2;
+
+                for (let pi = 0; pi <= phiSegments; pi++) {
+                    const phi = (pi / phiSegments) * Math.PI * 2;
+
+                    // Get biome and terrain height at this location
+                    const biomeName = generator.getBiomeNameTorus(theta, phi);
+                    const biome = generator.biomeData[biomeName] || generator.biomeData.grassland;
+                    const height = generator.getSurfaceHeight(theta, phi, biome);
+
+                    // Calculate torus position with terrain height
+                    // Push impostor INWARD by 2 units so voxels always render in front
+                    const tubeR = r + height - 2;  // Slightly smaller than actual terrain
+                    const x = (R + tubeR * Math.cos(phi)) * Math.cos(theta);
+                    const y = tubeR * Math.sin(phi);
+                    const z = (R + tubeR * Math.cos(phi)) * Math.sin(theta);
+
+                    vertices.push(x, y, z);
+
+                    // Color based on biome and height - MATCH chunk generator colors exactly
+                    let color;
+                    if (height < generator.seaLevel) {
+                        // Water - same as chunk generator 0x2E7D9A
+                        color = new THREE.Color(0x2E7D9A);
+                    } else {
+                        // Land biome colors - match getBlockAt() surface colors
+                        switch (biomeName) {
+                            case 'desert':
+                                color = new THREE.Color(0xEDC9AF);  // Sand
+                                break;
+                            case 'mountains':
+                                if (height > 11) {
+                                    color = new THREE.Color(0xFFFAFA);  // Snow cap
+                                } else {
+                                    color = new THREE.Color(0x909090);  // Exposed stone
+                                }
+                                break;
+                            case 'ice':
+                                color = new THREE.Color(0xE8F4F8);  // Snow
+                                break;
+                            case 'forest':
+                                color = new THREE.Color(0x2D5A27);  // Dark grass
+                                break;
+                            case 'grassland':
+                            case 'plains':
+                            default:
+                                color = new THREE.Color(0x3d8b3d);  // Grass (surface layer color)
+                                break;
+                        }
+                    }
+                    colors.push(color.r, color.g, color.b);
+                }
+            }
+
+            // Build indices for triangle strips
+            for (let ti = 0; ti < thetaSegments; ti++) {
+                for (let pi = 0; pi < phiSegments; pi++) {
+                    const a = ti * (phiSegments + 1) + pi;
+                    const b = a + phiSegments + 1;
+                    const c = a + 1;
+                    const d = b + 1;
+
+                    // Two triangles per quad - winding for inside view (FrontSide, normals point inward)
+                    indices.push(a, c, b);
+                    indices.push(c, d, b);
+                }
+            }
+
+            log(`Impostor: ${vertices.length/3} vertices, ${indices.length/3} triangles`, 'info');
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.setIndex(indices);
+            geometry.computeVertexNormals();
+
+            // Use a custom shader for impostor that matches chunk lighting
+            // This ensures smooth visual transition between chunks and impostor
+            const impostorMaterial = new THREE.ShaderMaterial({
+                vertexShader: `
+                    varying vec3 vColor;
+                    varying vec3 vNormal;
+                    varying vec3 vWorldPos;
+                    void main() {
+                        vColor = color;
+                        // Negate normal for inside-torus viewing (we're inside looking at inner surface)
+                        vNormal = -normalize(normalMatrix * normal);
+                        vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform vec3 uSunDirection;
+                    uniform vec3 uPlayerPos;
+                    uniform float uClipRadius;
+                    varying vec3 vColor;
+                    varying vec3 vNormal;
+                    varying vec3 vWorldPos;
+                    void main() {
+                        // Don't render impostor near player - chunks cover that area
+                        float distToPlayer = length(vWorldPos - uPlayerPos);
+                        if (distToPlayer < uClipRadius) discard;
+
+                        vec3 sunDir = normalize(uSunDirection);
+                        float diffuse = max(dot(vNormal, sunDir), 0.0);
+                        float lighting = 0.4 + 0.6 * diffuse;
+                        gl_FragColor = vec4(vColor * lighting, 1.0);
+                    }
+                `,
+                uniforms: impostorUniforms = {
+                    uSunDirection: { value: new THREE.Vector3(0.57735, 0.57735, 0.57735) },
+                    uPlayerPos: { value: new THREE.Vector3(0, 0, 0) },
+                    uClipRadius: { value: CHUNK_LOAD_RADIUS * generator.chunkSize * 0.9 }
+                },
+                vertexColors: true,
+                side: THREE.FrontSide,
+                depthWrite: true,
+                depthTest: true,
+                stencilWrite: false,
+                stencilFunc: THREE.EqualStencilFunc,
+                stencilRef: 0,  // Only render where stencil is 0 (no chunks)
+                stencilFail: THREE.KeepStencilOp,
+                stencilZFail: THREE.KeepStencilOp,
+                stencilZPass: THREE.KeepStencilOp
+            });
+
+            impostorTorus = new THREE.Mesh(geometry, impostorMaterial);
+            impostorTorus.renderOrder = 1000;  // Render AFTER chunks (chunks mark stencil first)
+            scene.add(impostorTorus);
+
+            log(`Created terrain impostor (${thetaSegments}x${phiSegments} samples)`, 'info');
+        }
+
+        // ===================================================================
+        // PROGRESSIVE CHUNK LOADING
+        // ===================================================================
+        function getPlayerChunkCoords() {
+            // Convert player world position to chunk indices
+            // Theta is angle around the ring (in XZ plane)
+            let theta = Math.atan2(playerPos.z, playerPos.x);
+            if (theta < 0) theta += Math.PI * 2;  // Normalize to [0, 2*PI]
+
+            // Find centerline point at this theta
+            const centerX = effectiveMajorRadius * Math.cos(theta);
+            const centerZ = effectiveMajorRadius * Math.sin(theta);
+
+            // Vector from centerline to player
+            const dx = playerPos.x - centerX;
+            const dy = playerPos.y;
+            const dz = playerPos.z - centerZ;
+
+            // Phi is angle around the tube cross-section
+            // In our Y-up torus: phi=0 is outer edge (positive x from center), phi rotates toward +Y
+            const radialDist = Math.sqrt(dx * dx + dz * dz);
+            const radialSign = (playerPos.x * centerX + playerPos.z * centerZ) > (effectiveMajorRadius * effectiveMajorRadius) ? 1 : -1;
+            let phi = Math.atan2(dy, radialDist * radialSign);
+            if (phi < 0) phi += Math.PI * 2;  // Normalize to [0, 2*PI]
+
+            // Convert angles to chunk indices (theta and phi both go 0 to 2*PI)
+            const i = Math.floor((theta / (Math.PI * 2)) * generator.numAroundRing) % generator.numAroundRing;
+            const j = Math.floor((phi / (Math.PI * 2)) * generator.numAroundTube) % generator.numAroundTube;
+
+            return { i, j };
+        }
+
+        function loadChunksAroundPlayer() {
+            const playerChunk = getPlayerChunkCoords();
+            let chunksLoadedThisFrame = 0;
+
+            // Spiral outward from player position
+            for (let radius = 0; radius <= CHUNK_LOAD_RADIUS && chunksLoadedThisFrame < CHUNKS_PER_FRAME; radius++) {
+                for (let di = -radius; di <= radius && chunksLoadedThisFrame < CHUNKS_PER_FRAME; di++) {
+                    for (let dj = -radius; dj <= radius && chunksLoadedThisFrame < CHUNKS_PER_FRAME; dj++) {
+                        // Only process chunks at this radius (ring pattern)
+                        if (Math.abs(di) !== radius && Math.abs(dj) !== radius) continue;
+
+                        // Wrap around torus
+                        const i = (playerChunk.i + di + generator.numAroundRing) % generator.numAroundRing;
+                        const j = (playerChunk.j + dj + generator.numAroundTube) % generator.numAroundTube;
+                        const key = `${i}_${j}`;
+
+                        // Skip if already loaded
+                        if (loadedChunks.has(key)) continue;
+
+                        // Generate and mesh this chunk
+                        loadChunk(i, j);
+                        chunksLoadedThisFrame++;
+                    }
+                }
+            }
+
+            // Update UI
+            document.getElementById('chunk-count').textContent =
+                loadedChunks.size + ' / ' + (generator.numAroundRing * generator.numAroundTube);
+        }
+
+        function loadChunk(i, j) {
+            const key = `${i}_${j}`;
+
+            // Generate chunk data (or use cached)
+            let chunkData = chunkDataCache.get(key);
+            if (!chunkData) {
+                const u = (i / generator.numAroundRing) * Math.PI * 2;
+                const v = (j / generator.numAroundTube) * Math.PI * 2;
+                const chunk = generator.generateSurfaceChunk(u, v, i, j);
+                chunkData = { chunk, i, j, u, v };
+                chunkDataCache.set(key, chunkData);
+            }
+
+            // Create neighbor lookup for meshing
+            const createNeighborLookup = (chunkI, chunkJ) => {
+                return (cx, cy, cz, x, y, z, chunkSize) => {
+                    if (y < 0) return true;
+                    if (y >= chunkSize) return false;
+
+                    let neighborI = chunkI;
+                    let neighborJ = chunkJ;
+                    let localX = x;
+                    let localZ = z;
+
+                    if (x < 0) {
+                        neighborI = (chunkI - 1 + generator.numAroundRing) % generator.numAroundRing;
+                        localX = chunkSize + x;
+                    } else if (x >= chunkSize) {
+                        neighborI = (chunkI + 1) % generator.numAroundRing;
+                        localX = x - chunkSize;
+                    }
+
+                    if (z < 0) {
+                        neighborJ = (chunkJ - 1 + generator.numAroundTube) % generator.numAroundTube;
+                        localZ = chunkSize + z;
+                    } else if (z >= chunkSize) {
+                        neighborJ = (chunkJ + 1) % generator.numAroundTube;
+                        localZ = z - chunkSize;
+                    }
+
+                    const neighborData = chunkDataCache.get(`${neighborI}_${neighborJ}`);
+                    if (!neighborData) return false;
+                    return neighborData.chunk.hasVoxel(localX, y, localZ);
+                };
+            };
+
+            // Build mesh
+            const meshData = chunkData.chunk.buildMesh(createNeighborLookup(i, j), { maxQuadSize: 1 });
+
+            if (meshData && meshData.vertices && meshData.vertices.length > 0) {
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(meshData.vertices, 3));
+                geometry.setAttribute('normal', new THREE.BufferAttribute(meshData.normals, 3));
+                geometry.setAttribute('color', new THREE.BufferAttribute(meshData.colors, 3));
+
+                const mesh = new THREE.Mesh(geometry, chunkMaterial);
+                mesh.frustumCulled = false;
+
+                const gridPos = generator.getChunkGridPosition(chunkData.u, chunkData.v, 0, i, j);
+                mesh.position.set(gridPos.x, gridPos.y, gridPos.z);
+
+                chunkGroup.add(mesh);
+                loadedChunks.set(key, mesh);
+            } else {
+                // Empty chunk - mark as loaded anyway
+                loadedChunks.set(key, null);
+            }
+        }
+
+        // ===================================================================
+        // CONTROLS
+        // ===================================================================
+        function initControls() {
+            document.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (key in keys) keys[key] = true;
+                if (key === '1') {
+                    showWireframe = !showWireframe;
+                    if (torusWireframe) torusWireframe.visible = showWireframe;
+                }
+                if (key === '2') {
+                    enableBending = !enableBending;
+                    // Only update uniforms on bent material (far mesh)
+                    if (shaderUniforms) {
+                        shaderUniforms.uFarRadius.value = enableBending ? 1 : 999999;
+                    }
+                    log(`Bending ${enableBending ? 'enabled' : 'disabled'}`, 'info');
+                }
+                if (key === '3') {
+                    initPlayer();
+                    log('Position reset', 'info');
+                }
+            });
+
+            document.addEventListener('keyup', (e) => {
+                const key = e.key.toLowerCase();
+                if (key in keys) keys[key] = false;
+            });
+
+            renderer.domElement.addEventListener('click', () => {
+                renderer.domElement.requestPointerLock();
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === renderer.domElement) {
+                    document.addEventListener('mousemove', onMouseMove);
+                } else {
+                    document.removeEventListener('mousemove', onMouseMove);
+                }
+            });
+        }
+
+        function onMouseMove(e) {
+            yaw -= e.movementX * 0.002;
+            pitch -= e.movementY * 0.002;
+            const maxPitch = Math.PI / 2 - 0.1;
+            pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
+        }
+
+        // ===================================================================
+        // QUATERNION SURFACE ROTATION (Torus Y-up, ring in XZ plane)
+        // Matches shader: x=(R+r*cos(phi))*cos(theta), y=r*sin(phi), z=(R+r*cos(phi))*sin(theta)
+        // ===================================================================
+        function getSurfaceRotation(pos) {
+            // Torus in XZ plane, Y is vertical: theta from atan2(z, x)
+            const theta = Math.atan2(pos.z, pos.x);
+
+            // Centerline point (on ring in XZ plane, y=0)
+            const centerlineX = effectiveMajorRadius * Math.cos(theta);
+            const centerlineZ = effectiveMajorRadius * Math.sin(theta);
+            const centerlinePoint = new THREE.Vector3(centerlineX, 0, centerlineZ);
+
+            // Local up = outward from centerline
+            const localUp = new THREE.Vector3().subVectors(pos, centerlinePoint).normalize();
+
+            // Ring tangent (along the ring in XZ plane)
+            const ringTangent = new THREE.Vector3(-Math.sin(theta), 0, Math.cos(theta));
+
+            const axisY = localUp;
+            const axisZ = ringTangent.clone().negate();
+            const axisX = new THREE.Vector3().crossVectors(axisY, axisZ).normalize();
+            axisZ.crossVectors(axisX, axisY).normalize();
+
+            const rotMatrix = new THREE.Matrix4().makeBasis(axisX, axisY, axisZ);
+            return new THREE.Quaternion().setFromRotationMatrix(rotMatrix);
+        }
+
+        // ===================================================================
+        // LOCAL PHYSICS HELPERS (Torus Y-up, ring in XZ plane)
+        // ===================================================================
+        function getLocalUpVector(x, y, z) {
+            // Torus in XZ plane, Y vertical: centerline is circle in XZ at y=0
+            const radialDist = Math.sqrt(x * x + z * z);
+            if (radialDist < 0.0001) {
+                return new THREE.Vector3(0, 1, 0);
+            }
+            // Find closest point on ring centerline (in XZ plane, y=0)
+            const centerlineX = (x / radialDist) * effectiveMajorRadius;
+            const centerlineZ = (z / radialDist) * effectiveMajorRadius;
+            // Vector from centerline to position
+            const dx = x - centerlineX;
+            const dy = y;  // Centerline is at y=0
+            const dz = z - centerlineZ;
+            const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len < 0.0001) {
+                return new THREE.Vector3(0, 1, 0);
+            }
+            return new THREE.Vector3(dx / len, dy / len, dz / len);
+        }
+
+        function getLocalDistanceFromSurface(x, y, z) {
+            // Torus in XZ plane, Y vertical
+            const radialDist = Math.sqrt(x * x + z * z);
+            if (radialDist < 0.0001) {
+                return -effectiveMinorRadius;
+            }
+            // Find closest point on ring centerline
+            const centerlineX = (x / radialDist) * effectiveMajorRadius;
+            const centerlineZ = (z / radialDist) * effectiveMajorRadius;
+            const dx = x - centerlineX;
+            const dy = y;
+            const dz = z - centerlineZ;
+            const distFromCenterline = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            // Surface is at effective minor radius + terrain height
+            const surfaceRadius = effectiveMinorRadius + generator.surfaceDepth;
+            return distFromCenterline - surfaceRadius;
+        }
+
+        // ===================================================================
+        // PHYSICS
+        // ===================================================================
+        function updatePhysics(delta) {
+            const localUp = getLocalUpVector(playerPos.x, playerPos.y, playerPos.z);
+            const distToSurface = getLocalDistanceFromSurface(playerPos.x, playerPos.y, playerPos.z);
+
+            // Ground detection
+            if (!isGrounded) {
+                isGrounded = distToSurface < 0.1;
+            }
+
+            // Gravity
+            if (!isGrounded) {
+                velocity.addScaledVector(localUp, -GRAVITY_STRENGTH * delta);
+            } else {
+                const velocityAlongUp = velocity.dot(localUp);
+                if (velocityAlongUp < 0) {
+                    velocity.addScaledVector(localUp, -velocityAlongUp);
+                }
+                velocity.multiplyScalar(0.85);
+
+                if (distToSurface < 0) {
+                    playerPos.addScaledVector(localUp, -distToSurface);
+                }
+            }
+
+            // Jump
+            if (keys.space && isGrounded) {
+                velocity.addScaledVector(localUp, JUMP_VELOCITY);
+                isGrounded = false;
+            }
+
+            // WASD Movement
+            const surfaceRot = getSurfaceRotation(playerPos);
+            const moveRot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+            const combinedRot = surfaceRot.clone().multiply(moveRot);
+
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(combinedRot);
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(combinedRot);
+
+            const sprintMultiplier = keys.r ? 2.0 : 1.0;
+            const moveSpeed = MOVE_SPEED * delta * sprintMultiplier;
+            if (keys.w) playerPos.addScaledVector(forward, moveSpeed);
+            if (keys.s) playerPos.addScaledVector(forward, -moveSpeed);
+            if (keys.a) playerPos.addScaledVector(right, -moveSpeed);
+            if (keys.d) playerPos.addScaledVector(right, moveSpeed);
+
+            // Apply velocity
+            playerPos.add(velocity.clone().multiplyScalar(delta));
+
+            // Update UI
+            document.getElementById('player-pos').textContent =
+                `${playerPos.x.toFixed(1)}, ${playerPos.y.toFixed(1)}, ${playerPos.z.toFixed(1)}`;
+            document.getElementById('surface-dist').textContent = distToSurface.toFixed(2);
+            document.getElementById('grounded').textContent = isGrounded ? 'Yes' : 'No';
+        }
+
+        // ===================================================================
+        // CAMERA
+        // ===================================================================
+        function updateCamera() {
+            const localUp = getLocalUpVector(playerPos.x, playerPos.y, playerPos.z);
+
+            camera.position.copy(playerPos).addScaledVector(localUp, 1.6);
+
+            const surfaceRot = getSurfaceRotation(playerPos);
+            const lookRot = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+            camera.quaternion.multiplyQuaternions(surfaceRot, lookRot);
+        }
+
+        // ===================================================================
+        // ANIMATION LOOP
+        // ===================================================================
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fpsTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const currentTime = performance.now();
+            const delta = Math.min((currentTime - lastTime) / 1000, 0.1);
+            lastTime = currentTime;
+
+            updatePhysics(delta);
+            updateCamera();
+
+            // Progressive chunk loading around player
+            loadChunksAroundPlayer();
+
+            // Update shader uniforms (including matrices for per-pixel depth)
+            if (shaderUniforms) {
+                shaderUniforms.uPlayerPos.value.copy(playerPos);
+                // Update view/projection matrices for per-pixel torus depth correction
+                camera.updateMatrixWorld();
+                shaderUniforms.uViewMatrix.value.copy(camera.matrixWorldInverse);
+                shaderUniforms.uProjectionMatrix.value.copy(camera.projectionMatrix);
+            }
+
+            // Update impostor clip position
+            if (impostorUniforms) {
+                impostorUniforms.uPlayerPos.value.copy(playerPos);
+            }
+
+            // Update star animation
+            if (starMesh && starMesh.material.uniforms) {
+                starMesh.material.uniforms.uTime.value = currentTime * 0.001;
+            }
+            if (starGlow && starGlow.material.uniforms) {
+                starGlow.material.uniforms.uTime.value = currentTime * 0.001;
+            }
+
+            // Rotate ringworld around star (chunks and impostor)
+            ringworldRotation += ROTATION_SPEED * delta;
+            if (chunkGroup) {
+                chunkGroup.rotation.y = ringworldRotation;
+            }
+            if (impostorTorus) {
+                impostorTorus.rotation.y = ringworldRotation;
+            }
+
+            // Update sun direction to point from star (center) toward player
+            const sunDir = new THREE.Vector3().copy(playerPos).normalize();
+            if (shaderUniforms) {
+                shaderUniforms.uSunDirection.value.copy(sunDir);
+            }
+            if (impostorUniforms) {
+                impostorUniforms.uSunDirection.value.copy(sunDir);
+            }
+
+            renderer.render(scene, camera);
+
+            // FPS counter
+            frameCount++;
+            fpsTime += delta;
+            if (fpsTime >= 1.0) {
+                document.getElementById('fps').textContent = frameCount;
+                frameCount = 0;
+                fpsTime = 0;
+            }
+        }
+
+        // ===================================================================
+        // WINDOW RESIZE
+        // ===================================================================
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

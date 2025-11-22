@@ -10,7 +10,9 @@
  * - Ship creation from builds
  */
 
-import { log } from '../../utils/logger.js';
+import logger from '../../utils/logger.js';
+
+const log = logger.child('Ships');
 
 /**
  * Create handler for ship control input

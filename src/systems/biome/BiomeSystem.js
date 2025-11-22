@@ -1,4 +1,4 @@
-import { voxelTypeRegistry, VOXEL_TYPES } from '../data/voxel/VoxelTypes.js';
+import { voxelTypeRegistry, VOXEL_TYPES } from '../../data/voxel/VoxelTypes.js';
 
 export class BiomeSystem {
     constructor(worldSystem) {
@@ -218,11 +218,14 @@ export class BiomeSystem {
     }
 
     getBiomeAt(x, y, z, distribution) {
+        // Use provided distribution or fall back to instance distribution
+        const dist = distribution || this.distribution || { plains: 1 };
+
         const angle = Math.atan2(z, x);
         const normalizedAngle = (angle + Math.PI) / (2 * Math.PI);
 
         let accumulated = 0;
-        for (const [biome, weight] of Object.entries(distribution)) {
+        for (const [biome, weight] of Object.entries(dist)) {
             accumulated += weight;
             if (normalizedAngle <= accumulated) {
                 return biome;

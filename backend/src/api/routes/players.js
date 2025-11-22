@@ -6,7 +6,7 @@
 
 import express from 'express';
 import { hashPassword, verifyPassword } from '../middleware/auth.js';
-import { logger } from '../../utils/logger.js';
+import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
@@ -29,17 +29,19 @@ export function createPlayerRoutes(centralLibraryDB, authMiddleware) {
 
     /**
      * POST /api/players/register
-     * Register a new player
+     * Register a new player with optional passphrase (IRC-style)
+     * - With passphrase: Protected username, must use passphrase to login
+     * - Without passphrase: Guest mode, anyone can reclaim the name
      */
     router.post('/register', async (req, res) => {
         try {
             const { username, password } = req.body;
 
-            // Validation
-            if (!username || !password) {
+            // Username is required
+            if (!username) {
                 return res.status(400).json({
-                    error: 'Missing required fields',
-                    required: ['username', 'password']
+                    error: 'Missing username',
+                    required: ['username']
                 });
             }
 
@@ -50,22 +52,61 @@ export function createPlayerRoutes(centralLibraryDB, authMiddleware) {
                 });
             }
 
-            if (password.length < 8) {
+            if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
                 return res.status(400).json({
-                    error: 'Invalid password',
-                    message: 'Password must be at least 8 characters'
+                    error: 'Invalid username',
+                    message: 'Only letters, numbers, underscore, and hyphen allowed'
                 });
             }
 
-            // Hash password
-            const passwordHash = await hashPassword(password);
+            // Check if username exists
+            const existing = await centralLibraryDB.getPlayerByUsername(username);
 
-            // Create player
+            if (existing) {
+                // Username exists - check if it has a password
+                if (existing.password_hash) {
+                    return res.status(409).json({
+                        error: 'Username protected',
+                        message: 'This username is protected by a passphrase. Use /login instead.'
+                    });
+                } else {
+                    // Guest account - let them reclaim it
+                    log.info('Guest username reclaimed', {
+                        playerId: existing.player_id,
+                        username: existing.username
+                    });
+
+                    return res.json({
+                        success: true,
+                        player: {
+                            playerId: existing.player_id,
+                            username: existing.username,
+                            trustScore: existing.trust_score,
+                            isGuest: true
+                        }
+                    });
+                }
+            }
+
+            // New username - create player
+            // If password provided, hash it; otherwise null for guest
+            let passwordHash = null;
+            if (password && password.length > 0) {
+                if (password.length < 6) {
+                    return res.status(400).json({
+                        error: 'Invalid passphrase',
+                        message: 'Passphrase must be at least 6 characters'
+                    });
+                }
+                passwordHash = await hashPassword(password);
+            }
+
             const player = await centralLibraryDB.createPlayer(username, passwordHash);
 
             log.info('Player registered', {
                 playerId: player.player_id,
-                username: player.username
+                username: player.username,
+                isGuest: !passwordHash
             });
 
             res.status(201).json({
@@ -74,7 +115,8 @@ export function createPlayerRoutes(centralLibraryDB, authMiddleware) {
                     playerId: player.player_id,
                     username: player.username,
                     trustScore: player.trust_score,
-                    createdAt: player.created_at
+                    createdAt: player.created_at,
+                    isGuest: !passwordHash
                 }
             });
 
@@ -96,16 +138,18 @@ export function createPlayerRoutes(centralLibraryDB, authMiddleware) {
 
     /**
      * POST /api/players/login
-     * Authenticate player and get player ID
+     * Authenticate player (IRC-style)
+     * - If username has no passphrase: Allow login without password
+     * - If username has passphrase: Require correct password
      */
     router.post('/login', async (req, res) => {
         try {
             const { username, password } = req.body;
 
-            if (!username || !password) {
+            if (!username) {
                 return res.status(400).json({
-                    error: 'Missing credentials',
-                    required: ['username', 'password']
+                    error: 'Missing username',
+                    required: ['username']
                 });
             }
 
@@ -114,24 +158,36 @@ export function createPlayerRoutes(centralLibraryDB, authMiddleware) {
 
             if (!player) {
                 return res.status(401).json({
-                    error: 'Invalid credentials',
-                    message: 'Username or password incorrect'
+                    error: 'User not found',
+                    message: 'Username does not exist. Use /register to create it.'
                 });
             }
 
-            // Verify password
-            const isValid = await verifyPassword(password, player.password_hash);
+            // Check if account is protected by passphrase
+            if (player.password_hash) {
+                // Protected account - require password
+                if (!password) {
+                    return res.status(401).json({
+                        error: 'Passphrase required',
+                        message: 'This username is protected by a passphrase'
+                    });
+                }
 
-            if (!isValid) {
-                return res.status(401).json({
-                    error: 'Invalid credentials',
-                    message: 'Username or password incorrect'
-                });
+                const isValid = await verifyPassword(password, player.password_hash);
+
+                if (!isValid) {
+                    return res.status(401).json({
+                        error: 'Invalid passphrase',
+                        message: 'Incorrect passphrase for this username'
+                    });
+                }
             }
+            // else: Guest account, no password needed
 
             log.info('Player logged in', {
                 playerId: player.player_id,
-                username: player.username
+                username: player.username,
+                isGuest: !player.password_hash
             });
 
             res.json({
@@ -140,7 +196,8 @@ export function createPlayerRoutes(centralLibraryDB, authMiddleware) {
                     playerId: player.player_id,
                     username: player.username,
                     trustScore: player.trust_score,
-                    lastActive: player.last_active
+                    lastActive: player.last_active,
+                    isGuest: !player.password_hash
                 }
             });
 
@@ -148,6 +205,71 @@ export function createPlayerRoutes(centralLibraryDB, authMiddleware) {
             log.error('Login failed', { error: error.message });
             res.status(500).json({
                 error: 'Login failed',
+                message: 'Internal server error'
+            });
+        }
+    });
+
+    /**
+     * POST /api/players/set-passphrase
+     * Set or update passphrase for current user (converts guest to protected)
+     */
+    router.post('/set-passphrase', authMiddleware, async (req, res) => {
+        try {
+            const { playerId } = req;
+            const { currentPassword, newPassword } = req.body;
+
+            if (!newPassword || newPassword.length < 6) {
+                return res.status(400).json({
+                    error: 'Invalid passphrase',
+                    message: 'New passphrase must be at least 6 characters'
+                });
+            }
+
+            const player = await centralLibraryDB.getPlayerById(playerId);
+
+            if (!player) {
+                return res.status(404).json({ error: 'Player not found' });
+            }
+
+            // If already has password, verify current password
+            if (player.password_hash) {
+                if (!currentPassword) {
+                    return res.status(400).json({
+                        error: 'Current passphrase required',
+                        message: 'Must provide current passphrase to change it'
+                    });
+                }
+
+                const isValid = await verifyPassword(currentPassword, player.password_hash);
+                if (!isValid) {
+                    return res.status(401).json({
+                        error: 'Invalid current passphrase'
+                    });
+                }
+            }
+
+            // Hash and set new password
+            const passwordHash = await hashPassword(newPassword);
+            await centralLibraryDB.updatePlayerPassword(playerId, passwordHash);
+
+            log.info('Player passphrase updated', {
+                playerId,
+                username: player.username,
+                wasGuest: !player.password_hash
+            });
+
+            res.json({
+                success: true,
+                message: player.password_hash
+                    ? 'Passphrase updated'
+                    : 'Passphrase set - your username is now protected'
+            });
+
+        } catch (error) {
+            log.error('Set passphrase failed', { error: error.message });
+            res.status(500).json({
+                error: 'Failed to set passphrase',
                 message: 'Internal server error'
             });
         }

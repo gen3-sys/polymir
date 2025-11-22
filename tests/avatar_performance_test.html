@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Performance Test - 50+ Avatars @ 60fps</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            overflow: hidden;
+        }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        canvas { display: block; }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 280px;
+            z-index: 100;
+        }
+        h1 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #00d4ff;
+        }
+        .section {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #333;
+        }
+        .section:last-child { border-bottom: none; }
+        .section-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 8px;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .stat {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 2px;
+        }
+        .stat-value {
+            font-size: 16px;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        .stat-value.good { color: #4caf50; }
+        .stat-value.warn { color: #ff9800; }
+        .stat-value.bad { color: #f44336; }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 4px;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #00d4ff;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            background: #00d4ff;
+            border: none;
+            border-radius: 4px;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #00b8e6; }
+        button.secondary {
+            background: #444;
+            color: #fff;
+        }
+        button.secondary:hover { background: #555; }
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .toggle {
+            position: relative;
+            width: 48px;
+            height: 24px;
+            background: #333;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+        .toggle.active { background: #00d4ff; }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .toggle.active::after { transform: translateX(24px); }
+        #fps-graph {
+            height: 60px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .legend {
+            display: flex;
+            gap: 15px;
+            font-size: 11px;
+            margin-top: 5px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+        #info-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div id="ui">
+        <h1>Avatar Performance Test</h1>
+
+        <div class="section">
+            <div class="section-title">Frame Statistics</div>
+            <div class="stat-grid">
+                <div class="stat">
+                    <div class="stat-label">FPS</div>
+                    <div class="stat-value" id="fps">60</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Frame Time</div>
+                    <div class="stat-value" id="frame-time">16.6ms</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Draw Calls</div>
+                    <div class="stat-value" id="draw-calls">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Triangles</div>
+                    <div class="stat-value" id="triangles">0</div>
+                </div>
+            </div>
+            <canvas id="fps-graph" width="250" height="60"></canvas>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Avatar Statistics</div>
+            <div class="stat-grid">
+                <div class="stat">
+                    <div class="stat-label">Total</div>
+                    <div class="stat-value" id="total-avatars">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Visible</div>
+                    <div class="stat-value" id="visible-avatars">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Full Detail</div>
+                    <div class="stat-value" id="full-detail">0</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Impostors</div>
+                    <div class="stat-value" id="impostors">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Test Controls</div>
+            <div class="control-group">
+                <label>Avatar Count: <span id="avatar-count-value">50</span></label>
+                <input type="range" id="avatar-count" min="10" max="200" value="50">
+            </div>
+            <div class="control-group">
+                <label>Spawn Radius: <span id="spawn-radius-value">100</span></label>
+                <input type="range" id="spawn-radius" min="20" max="500" value="100">
+            </div>
+            <button id="respawn-btn">Respawn Avatars</button>
+            <button id="stress-btn" class="secondary">Run Stress Test</button>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Optimization Settings</div>
+            <div class="toggle-row">
+                <span>Frustum Culling</span>
+                <div class="toggle active" id="toggle-culling"></div>
+            </div>
+            <div class="toggle-row">
+                <span>LOD System</span>
+                <div class="toggle active" id="toggle-lod"></div>
+            </div>
+            <div class="toggle-row">
+                <span>Batch Rendering</span>
+                <div class="toggle active" id="toggle-batching"></div>
+            </div>
+            <div class="toggle-row">
+                <span>Animation LOD</span>
+                <div class="toggle active" id="toggle-anim-lod"></div>
+            </div>
+            <div class="toggle-row">
+                <span>Show Debug</span>
+                <div class="toggle" id="toggle-debug"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Queue Distribution</div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4caf50"></div>
+                    <span>Full: <span id="queue-full">0</span></span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff9800"></div>
+                    <span>Med: <span id="queue-med">0</span></span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f44336"></div>
+                    <span>Low: <span id="queue-low">0</span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        WASD/Arrow keys to move | Mouse to look | Scroll to zoom
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Test configuration
+        const config = {
+            avatarCount: 50,
+            spawnRadius: 100,
+            enableCulling: true,
+            enableLOD: true,
+            enableBatching: true,
+            enableAnimLOD: true,
+            showDebug: false
+        };
+
+        // Scene setup
+        const container = document.getElementById('canvas-container');
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+        scene.fog = new THREE.Fog(0x1a1a2e, 50, 250);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 50, 80);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI * 0.45;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(50, 100, 50);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 10;
+        directionalLight.shadow.camera.far = 300;
+        directionalLight.shadow.camera.left = -150;
+        directionalLight.shadow.camera.right = 150;
+        directionalLight.shadow.camera.top = 150;
+        directionalLight.shadow.camera.bottom = -150;
+        scene.add(directionalLight);
+
+        // Ground
+        const groundGeometry = new THREE.PlaneGeometry(500, 500);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2a2a4a,
+            roughness: 0.9
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Grid helper
+        const gridHelper = new THREE.GridHelper(500, 50, 0x444466, 0x333344);
+        scene.add(gridHelper);
+
+        // Avatar storage
+        const avatars = [];
+        let instancedMesh = null;
+        const dummy = new THREE.Object3D();
+
+        // Frustum for culling
+        const frustum = new THREE.Frustum();
+        const frustumMatrix = new THREE.Matrix4();
+
+        // LOD distances
+        const LOD_DISTANCES = {
+            FULL: 20,
+            MEDIUM: 50,
+            LOW: 100,
+            CULL: 200
+        };
+
+        // Performance tracking
+        const fpsHistory = [];
+        const maxFpsHistory = 60;
+        let lastTime = performance.now();
+        let frameCount = 0;
+        let fps = 60;
+
+        // Statistics
+        const stats = {
+            visible: 0,
+            fullDetail: 0,
+            impostors: 0,
+            drawCalls: 0,
+            triangles: 0,
+            queueFull: 0,
+            queueMed: 0,
+            queueLow: 0
+        };
+
+        /**
+         * Create a simple voxel avatar mesh
+         */
+        function createAvatarGeometry() {
+            const geometry = new THREE.BufferGeometry();
+            const positions = [];
+            const colors = [];
+
+            // Generate humanoid shape with voxels
+            const voxelSize = 0.15;
+
+            // Color palette
+            const skinColor = new THREE.Color(0.9, 0.75, 0.6);
+            const shirtColor = new THREE.Color(0.2, 0.4, 0.8);
+            const pantsColor = new THREE.Color(0.3, 0.3, 0.35);
+            const hairColor = new THREE.Color(0.2, 0.15, 0.1);
+
+            function addVoxel(x, y, z, color) {
+                const s = voxelSize * 0.5;
+                const cx = x * voxelSize;
+                const cy = y * voxelSize;
+                const cz = z * voxelSize;
+
+                // Front face
+                positions.push(cx - s, cy - s, cz + s);
+                positions.push(cx + s, cy - s, cz + s);
+                positions.push(cx + s, cy + s, cz + s);
+                positions.push(cx - s, cy - s, cz + s);
+                positions.push(cx + s, cy + s, cz + s);
+                positions.push(cx - s, cy + s, cz + s);
+
+                // Back face
+                positions.push(cx + s, cy - s, cz - s);
+                positions.push(cx - s, cy - s, cz - s);
+                positions.push(cx - s, cy + s, cz - s);
+                positions.push(cx + s, cy - s, cz - s);
+                positions.push(cx - s, cy + s, cz - s);
+                positions.push(cx + s, cy + s, cz - s);
+
+                // Top face
+                positions.push(cx - s, cy + s, cz - s);
+                positions.push(cx - s, cy + s, cz + s);
+                positions.push(cx + s, cy + s, cz + s);
+                positions.push(cx - s, cy + s, cz - s);
+                positions.push(cx + s, cy + s, cz + s);
+                positions.push(cx + s, cy + s, cz - s);
+
+                // Bottom face
+                positions.push(cx - s, cy - s, cz + s);
+                positions.push(cx - s, cy - s, cz - s);
+                positions.push(cx + s, cy - s, cz - s);
+                positions.push(cx - s, cy - s, cz + s);
+                positions.push(cx + s, cy - s, cz - s);
+                positions.push(cx + s, cy - s, cz + s);
+
+                // Right face
+                positions.push(cx + s, cy - s, cz + s);
+                positions.push(cx + s, cy - s, cz - s);
+                positions.push(cx + s, cy + s, cz - s);
+                positions.push(cx + s, cy - s, cz + s);
+                positions.push(cx + s, cy + s, cz - s);
+                positions.push(cx + s, cy + s, cz + s);
+
+                // Left face
+                positions.push(cx - s, cy - s, cz - s);
+                positions.push(cx - s, cy - s, cz + s);
+                positions.push(cx - s, cy + s, cz + s);
+                positions.push(cx - s, cy - s, cz - s);
+                positions.push(cx - s, cy + s, cz + s);
+                positions.push(cx - s, cy + s, cz - s);
+
+                // Add colors (36 vertices per voxel)
+                for (let i = 0; i < 36; i++) {
+                    colors.push(color.r, color.g, color.b);
+                }
+            }
+
+            // Build humanoid shape
+            // Head (Y: 56-64, centered)
+            for (let y = 10; y < 13; y++) {
+                for (let x = -1; x <= 1; x++) {
+                    for (let z = -1; z <= 1; z++) {
+                        addVoxel(x, y, z, y === 12 ? hairColor : skinColor);
+                    }
+                }
+            }
+
+            // Body (Y: 36-56)
+            for (let y = 4; y < 10; y++) {
+                for (let x = -1; x <= 1; x++) {
+                    for (let z = -1; z <= 0; z++) {
+                        addVoxel(x, y, z, shirtColor);
+                    }
+                }
+            }
+
+            // Arms
+            for (let y = 6; y < 10; y++) {
+                addVoxel(-2, y, 0, shirtColor);
+                addVoxel(2, y, 0, shirtColor);
+            }
+            for (let y = 4; y < 6; y++) {
+                addVoxel(-2, y, 0, skinColor);
+                addVoxel(2, y, 0, skinColor);
+            }
+
+            // Legs
+            for (let y = 0; y < 4; y++) {
+                addVoxel(-1, y, 0, pantsColor);
+                addVoxel(1, y, 0, pantsColor);
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.computeVertexNormals();
+
+            return geometry;
+        }
+
+        /**
+         * Spawn avatars
+         */
+        function spawnAvatars() {
+            // Clear existing
+            if (instancedMesh) {
+                scene.remove(instancedMesh);
+                instancedMesh.geometry.dispose();
+                instancedMesh.material.dispose();
+            }
+            avatars.length = 0;
+
+            // Create instanced mesh
+            const geometry = createAvatarGeometry();
+            const material = new THREE.MeshLambertMaterial({
+                vertexColors: true
+            });
+
+            instancedMesh = new THREE.InstancedMesh(geometry, material, config.avatarCount);
+            instancedMesh.castShadow = true;
+            instancedMesh.receiveShadow = true;
+            scene.add(instancedMesh);
+
+            // Spawn avatars in random positions
+            for (let i = 0; i < config.avatarCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * config.spawnRadius;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+
+                const avatar = {
+                    id: i,
+                    position: new THREE.Vector3(x, 0, z),
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 2,
+                        0,
+                        (Math.random() - 0.5) * 2
+                    ),
+                    rotation: Math.random() * Math.PI * 2,
+                    animPhase: Math.random() * Math.PI * 2,
+                    visible: true,
+                    lodLevel: 0,
+                    distance: 0
+                };
+
+                avatars.push(avatar);
+
+                // Set initial transform
+                dummy.position.copy(avatar.position);
+                dummy.rotation.y = avatar.rotation;
+                dummy.updateMatrix();
+                instancedMesh.setMatrixAt(i, dummy.matrix);
+            }
+
+            instancedMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        /**
+         * Update avatar positions and animations
+         */
+        function updateAvatars(deltaTime) {
+            stats.visible = 0;
+            stats.fullDetail = 0;
+            stats.impostors = 0;
+            stats.queueFull = 0;
+            stats.queueMed = 0;
+            stats.queueLow = 0;
+
+            // Update frustum
+            frustumMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+            frustum.setFromProjectionMatrix(frustumMatrix);
+
+            for (let i = 0; i < avatars.length; i++) {
+                const avatar = avatars[i];
+
+                // Simple wandering behavior
+                avatar.position.x += avatar.velocity.x * deltaTime;
+                avatar.position.z += avatar.velocity.z * deltaTime;
+
+                // Bounce off boundaries
+                if (Math.abs(avatar.position.x) > config.spawnRadius) {
+                    avatar.velocity.x *= -1;
+                    avatar.position.x = Math.sign(avatar.position.x) * config.spawnRadius;
+                }
+                if (Math.abs(avatar.position.z) > config.spawnRadius) {
+                    avatar.velocity.z *= -1;
+                    avatar.position.z = Math.sign(avatar.position.z) * config.spawnRadius;
+                }
+
+                // Calculate distance to camera
+                avatar.distance = avatar.position.distanceTo(camera.position);
+
+                // Frustum culling
+                if (config.enableCulling) {
+                    const sphere = new THREE.Sphere(avatar.position, 2);
+                    avatar.visible = frustum.intersectsSphere(sphere) && avatar.distance < LOD_DISTANCES.CULL;
+                } else {
+                    avatar.visible = true;
+                }
+
+                // LOD determination
+                if (config.enableLOD && avatar.visible) {
+                    if (avatar.distance < LOD_DISTANCES.FULL) {
+                        avatar.lodLevel = 0;
+                        stats.fullDetail++;
+                        stats.queueFull++;
+                    } else if (avatar.distance < LOD_DISTANCES.MEDIUM) {
+                        avatar.lodLevel = 1;
+                        stats.queueMed++;
+                    } else if (avatar.distance < LOD_DISTANCES.LOW) {
+                        avatar.lodLevel = 2;
+                        stats.queueLow++;
+                        stats.impostors++;
+                    } else {
+                        avatar.lodLevel = 3;
+                        stats.impostors++;
+                    }
+                }
+
+                if (avatar.visible) {
+                    stats.visible++;
+
+                    // Animation (walking bob)
+                    avatar.animPhase += deltaTime * 5;
+                    const bob = Math.sin(avatar.animPhase) * 0.1;
+
+                    // Update instance transform
+                    dummy.position.set(avatar.position.x, bob, avatar.position.z);
+                    dummy.rotation.y = Math.atan2(avatar.velocity.x, avatar.velocity.z);
+
+                    // Scale based on LOD (simulating detail reduction)
+                    if (config.enableLOD) {
+                        const scale = avatar.lodLevel === 0 ? 1.0 :
+                                     avatar.lodLevel === 1 ? 0.95 :
+                                     avatar.lodLevel === 2 ? 0.9 : 0.85;
+                        dummy.scale.setScalar(scale);
+                    } else {
+                        dummy.scale.setScalar(1.0);
+                    }
+
+                    dummy.updateMatrix();
+                    instancedMesh.setMatrixAt(i, dummy.matrix);
+                } else {
+                    // Hide by scaling to 0
+                    dummy.scale.setScalar(0);
+                    dummy.updateMatrix();
+                    instancedMesh.setMatrixAt(i, dummy.matrix);
+                }
+            }
+
+            instancedMesh.instanceMatrix.needsUpdate = true;
+        }
+
+        /**
+         * Update FPS graph
+         */
+        function updateFpsGraph() {
+            const canvas = document.getElementById('fps-graph');
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw 60fps line
+            ctx.strokeStyle = '#4caf50';
+            ctx.setLineDash([2, 2]);
+            ctx.beginPath();
+            const y60 = canvas.height - (60 / 120) * canvas.height;
+            ctx.moveTo(0, y60);
+            ctx.lineTo(canvas.width, y60);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw 30fps line
+            ctx.strokeStyle = '#ff9800';
+            ctx.setLineDash([2, 2]);
+            ctx.beginPath();
+            const y30 = canvas.height - (30 / 120) * canvas.height;
+            ctx.moveTo(0, y30);
+            ctx.lineTo(canvas.width, y30);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw FPS history
+            if (fpsHistory.length > 1) {
+                ctx.strokeStyle = '#00d4ff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                for (let i = 0; i < fpsHistory.length; i++) {
+                    const x = (i / maxFpsHistory) * canvas.width;
+                    const y = canvas.height - (fpsHistory[i] / 120) * canvas.height;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+
+                ctx.stroke();
+            }
+        }
+
+        /**
+         * Update UI
+         */
+        function updateUI() {
+            // FPS coloring
+            const fpsEl = document.getElementById('fps');
+            fpsEl.textContent = fps.toFixed(0);
+            fpsEl.className = 'stat-value ' + (fps >= 55 ? 'good' : fps >= 30 ? 'warn' : 'bad');
+
+            // Frame time
+            const frameTime = 1000 / fps;
+            const ftEl = document.getElementById('frame-time');
+            ftEl.textContent = frameTime.toFixed(1) + 'ms';
+            ftEl.className = 'stat-value ' + (frameTime <= 17 ? 'good' : frameTime <= 33 ? 'warn' : 'bad');
+
+            // Render info
+            const info = renderer.info;
+            document.getElementById('draw-calls').textContent = info.render.calls;
+            document.getElementById('triangles').textContent = (info.render.triangles / 1000).toFixed(1) + 'k';
+
+            // Avatar stats
+            document.getElementById('total-avatars').textContent = config.avatarCount;
+            document.getElementById('visible-avatars').textContent = stats.visible;
+            document.getElementById('full-detail').textContent = stats.fullDetail;
+            document.getElementById('impostors').textContent = stats.impostors;
+
+            // Queue distribution
+            document.getElementById('queue-full').textContent = stats.queueFull;
+            document.getElementById('queue-med').textContent = stats.queueMed;
+            document.getElementById('queue-low').textContent = stats.queueLow;
+
+            // FPS graph
+            updateFpsGraph();
+        }
+
+        /**
+         * Main render loop
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const deltaTime = (now - lastTime) / 1000;
+            lastTime = now;
+
+            // FPS calculation
+            frameCount++;
+            if (frameCount >= 10) {
+                fps = 1000 / ((now - (lastTime - deltaTime * 1000 * frameCount)) / frameCount);
+                fps = Math.min(fps, 120); // Cap display at 120
+
+                fpsHistory.push(fps);
+                if (fpsHistory.length > maxFpsHistory) {
+                    fpsHistory.shift();
+                }
+
+                frameCount = 0;
+            }
+
+            // Update
+            controls.update();
+            updateAvatars(deltaTime);
+
+            // Render
+            renderer.render(scene, camera);
+
+            // Update UI (throttled)
+            if (Math.random() < 0.1) {
+                updateUI();
+            }
+        }
+
+        /**
+         * Stress test - progressively add avatars
+         */
+        async function runStressTest() {
+            const btn = document.getElementById('stress-btn');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+
+            const originalCount = config.avatarCount;
+            const testCounts = [10, 25, 50, 75, 100, 150, 200];
+
+            for (const count of testCounts) {
+                config.avatarCount = count;
+                document.getElementById('avatar-count').value = count;
+                document.getElementById('avatar-count-value').textContent = count;
+
+                spawnAvatars();
+
+                // Wait for FPS to stabilize
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                console.log(`${count} avatars: ${fps.toFixed(1)} FPS`);
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Run Stress Test';
+        }
+
+        // UI Event handlers
+        document.getElementById('avatar-count').addEventListener('input', (e) => {
+            config.avatarCount = parseInt(e.target.value);
+            document.getElementById('avatar-count-value').textContent = config.avatarCount;
+        });
+
+        document.getElementById('spawn-radius').addEventListener('input', (e) => {
+            config.spawnRadius = parseInt(e.target.value);
+            document.getElementById('spawn-radius-value').textContent = config.spawnRadius;
+        });
+
+        document.getElementById('respawn-btn').addEventListener('click', spawnAvatars);
+        document.getElementById('stress-btn').addEventListener('click', runStressTest);
+
+        // Toggle handlers
+        function setupToggle(id, configKey) {
+            const toggle = document.getElementById(id);
+            toggle.addEventListener('click', () => {
+                config[configKey] = !config[configKey];
+                toggle.classList.toggle('active', config[configKey]);
+            });
+        }
+
+        setupToggle('toggle-culling', 'enableCulling');
+        setupToggle('toggle-lod', 'enableLOD');
+        setupToggle('toggle-batching', 'enableBatching');
+        setupToggle('toggle-anim-lod', 'enableAnimLOD');
+        setupToggle('toggle-debug', 'showDebug');
+
+        // Window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Initialize
+        spawnAvatars();
+        animate();
+
+        console.log('Avatar Performance Test initialized');
+        console.log('Target: 50+ avatars @ 60fps');
+    </script>
+</body>
+</html>

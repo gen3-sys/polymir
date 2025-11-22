@@ -6,9 +6,14 @@
  */
 
 import { NetworkAdapter, NetworkEvents } from './NetworkAdapter.js';
-import { Logger } from '../../debug/Logger.js';
 
-const log = new Logger('WebSocketAdapter');
+// Simple console logger for browser compatibility
+const log = {
+    info: (...args) => console.log('[WebSocketAdapter]', ...args),
+    error: (...args) => console.error('[WebSocketAdapter]', ...args),
+    warn: (...args) => console.warn('[WebSocketAdapter]', ...args),
+    debug: (...args) => console.debug('[WebSocketAdapter]', ...args)
+};
 
 // =============================================
 // WEBSOCKET ADAPTER

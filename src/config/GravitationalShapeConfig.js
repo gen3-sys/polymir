@@ -54,22 +54,36 @@ export class GravitationalShapeConfig {
     }
 
     validate() {
-        const validTypes = ['point', 'ring', 'plane'];
+        const validTypes = ['point', 'ring', 'torus', 'plane'];
         if (!validTypes.includes(this.type)) {
             throw new Error(`Invalid gravitational shape type: ${this.type}`);
         }
 
+        // Normalize 'torus' to 'ring' internally
+        if (this.type === 'torus') {
+            this.type = 'ring';
+        }
+
+        // Helper to normalize center (array or object)
+        const normalizeCenter = () => {
+            if (!this.params.center) {
+                this.params.center = { x: 0, y: 0, z: 0 };
+            } else if (Array.isArray(this.params.center)) {
+                this.params.center = {
+                    x: this.params.center[0] || 0,
+                    y: this.params.center[1] || 0,
+                    z: this.params.center[2] || 0
+                };
+            }
+        };
+
         switch (this.type) {
             case 'point':
-                if (!this.params.center) {
-                    this.params.center = { x: 0, y: 0, z: 0 };
-                }
+                normalizeCenter();
                 break;
 
             case 'ring':
-                if (!this.params.center) {
-                    this.params.center = { x: 0, y: 0, z: 0 };
-                }
+                normalizeCenter();
                 if (this.params.majorRadius === undefined) {
                     throw new Error('Ring shape requires majorRadius parameter');
                 }
@@ -79,9 +93,7 @@ export class GravitationalShapeConfig {
                 break;
 
             case 'plane':
-                if (!this.params.center) {
-                    this.params.center = { x: 0, y: 0, z: 0 };
-                }
+                normalizeCenter();
                 if (!this.params.normal) {
                     this.params.normal = { x: 0, y: 1, z: 0 }; // Default: horizontal plane
                 }
@@ -223,6 +235,7 @@ export class GravitationalShapeConfig {
         const cy = this.params.center.y;
         const cz = this.params.center.z;
         const R = this.params.majorRadius;
+        const r = this.params.minorRadius || 1; // Minor radius (tube radius)
 
         // Distance from Y axis
         const distFromAxis = Math.sqrt((x - cx) ** 2 + (z - cz) ** 2);
@@ -242,7 +255,7 @@ export class GravitationalShapeConfig {
             return {
                 point: { x: ringX, y: ringY, z: ringZ },
                 normal: { x: 0, y: 1, z: 0 },
-                distance: 0
+                distance: -r // Inside the torus at centerline
             };
         }
 
@@ -251,14 +264,17 @@ export class GravitationalShapeConfig {
         const ny = dy / dist;
         const nz = dz / dist;
 
+        // Surface point at minor radius from centerline
+        const surfacePoint = {
+            x: ringX + nx * r,
+            y: ringY + ny * r,
+            z: ringZ + nz * r
+        };
+
         return {
-            point: {
-                x: ringX + nx,
-                y: ringY + ny,
-                z: ringZ + nz
-            },
+            point: surfacePoint,
             normal: { x: nx, y: ny, z: nz },
-            distance: dist - 1 // Assuming unit minor radius surface
+            distance: dist - r // Positive = outside torus, negative = inside
         };
     }
 
@@ -282,6 +298,36 @@ export class GravitationalShapeConfig {
             normal: { x: nx, y: ny, z: nz },
             distance: Math.abs(distance)
         };
+    }
+
+    /**
+     * Add a layer configuration
+     * @param {string} name - Layer name
+     * @param {number} depthStart - Start depth (0-1, 0 = center)
+     * @param {number} depthEnd - End depth (0-1, 1 = surface)
+     * @param {string} generationMode - 'uniform', 'simple', or 'full'
+     * @param {number|string} voxelType - Voxel type ID or 'biome'
+     * @param {boolean} solid - Whether layer is solid (no caves)
+     */
+    addLayer(name, depthStart, depthEnd, generationMode = 'full', voxelType = 1, solid = false) {
+        this.layers.push({
+            name,
+            depthRange: [depthStart, depthEnd],
+            voxelType,
+            generationMode,
+            solid
+        });
+        // Sort layers by depth start
+        this.layers.sort((a, b) => a.depthRange[0] - b.depthRange[0]);
+        return this;
+    }
+
+    /**
+     * Clear all layers (useful before adding custom layers)
+     */
+    clearLayers() {
+        this.layers = [];
+        return this;
     }
 
     /**

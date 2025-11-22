@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voxel Avatar Editor Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        #header {
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+        }
+        #header h1 {
+            font-size: 18px;
+            color: #00d4ff;
+        }
+        #header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        #header-actions button {
+            padding: 8px 16px;
+            background: #333;
+            border: none;
+            border-radius: 4px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        #header-actions button:hover { background: #444; }
+        #header-actions button.primary {
+            background: #00d4ff;
+            color: #000;
+        }
+
+        /* Main layout */
+        #main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Left panel - Tools */
+        #tools-panel {
+            width: 60px;
+            background: #0f0f1a;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            border-right: 1px solid #333;
+        }
+        .tool-btn {
+            width: 40px;
+            height: 40px;
+            background: #222;
+            border: none;
+            border-radius: 6px;
+            color: #888;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .tool-btn:hover { background: #333; color: #fff; }
+        .tool-btn.active {
+            background: #00d4ff;
+            color: #000;
+        }
+        .tool-divider {
+            height: 1px;
+            background: #333;
+            margin: 5px 0;
+        }
+
+        /* Canvas area */
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        #canvas-container canvas {
+            display: block;
+        }
+        #grid-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        #coordinates {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        /* Right panel */
+        #right-panel {
+            width: 280px;
+            background: #0f0f1a;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: #16213e;
+            border-bottom: 1px solid #333;
+        }
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 12px;
+            color: #888;
+            border-bottom: 2px solid transparent;
+        }
+        .tab:hover { color: #fff; }
+        .tab.active {
+            color: #00d4ff;
+            border-bottom-color: #00d4ff;
+        }
+
+        /* Tab content */
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: none;
+        }
+        .tab-content.active { display: block; }
+
+        /* Palette */
+        #palette-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .palette-color {
+            aspect-ratio: 1;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .palette-color:hover { transform: scale(1.1); }
+        .palette-color.selected { border-color: #fff; }
+
+        /* Color picker */
+        #color-picker-container {
+            background: #1a1a2e;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        #color-preview {
+            height: 40px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .color-slider {
+            margin-bottom: 8px;
+        }
+        .color-slider label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 2px;
+        }
+        .color-slider input {
+            width: 100%;
+        }
+
+        /* Templates */
+        #templates-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .template-card {
+            background: #1a1a2e;
+            border-radius: 6px;
+            padding: 10px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .template-card:hover {
+            background: #252540;
+            transform: translateY(-2px);
+        }
+        .template-icon {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+        .template-name {
+            font-size: 12px;
+            color: #888;
+        }
+
+        /* Preview panel */
+        #preview-canvas-container {
+            height: 200px;
+            background: #1a1a2e;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        .preview-controls {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .preview-btn {
+            flex: 1;
+            padding: 8px;
+            background: #222;
+            border: none;
+            border-radius: 4px;
+            color: #888;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .preview-btn:hover { background: #333; color: #fff; }
+        .preview-btn.active { background: #00d4ff; color: #000; }
+
+        /* Section titles */
+        .section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        /* Toggle switches */
+        .toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #222;
+        }
+        .toggle-row:last-child { border-bottom: none; }
+        .toggle {
+            width: 40px;
+            height: 22px;
+            background: #333;
+            border-radius: 11px;
+            cursor: pointer;
+            position: relative;
+        }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            background: #888;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+        .toggle.active { background: #00d4ff; }
+        .toggle.active::after {
+            left: 20px;
+            background: #fff;
+        }
+
+        /* History panel */
+        #history-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .history-item {
+            padding: 6px 10px;
+            background: #1a1a2e;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            color: #888;
+        }
+        .history-item.current {
+            background: #252550;
+            color: #fff;
+        }
+
+        /* Status bar */
+        #status-bar {
+            background: #16213e;
+            padding: 8px 20px;
+            font-size: 11px;
+            color: #888;
+            display: flex;
+            justify-content: space-between;
+            border-top: 1px solid #333;
+        }
+        #status-bar .shortcut {
+            color: #666;
+        }
+
+        /* Expressions */
+        .expression-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .expression-btn {
+            padding: 10px;
+            background: #1a1a2e;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+        }
+        .expression-btn:hover { background: #252540; }
+        .expression-btn.active { background: #00d4ff; color: #000; }
+        .expression-icon { font-size: 24px; display: block; }
+        .expression-name { font-size: 10px; color: #888; margin-top: 4px; }
+
+        /* Physics regions */
+        .physics-region {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .physics-region-name {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .physics-region-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>Voxel Avatar Editor</h1>
+        <div id="header-actions">
+            <button id="btn-new">New</button>
+            <button id="btn-load">Load</button>
+            <button id="btn-save" class="primary">Save</button>
+            <button id="btn-export">Export</button>
+        </div>
+    </div>
+
+    <div id="main">
+        <!-- Tools Panel -->
+        <div id="tools-panel">
+            <button class="tool-btn active" data-tool="pencil" title="Pencil (P)">P</button>
+            <button class="tool-btn" data-tool="eraser" title="Eraser (E)">E</button>
+            <button class="tool-btn" data-tool="paint" title="Paint (B)">B</button>
+            <button class="tool-btn" data-tool="fill" title="Fill (F)">F</button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn" data-tool="box" title="Box Select (X)">X</button>
+            <button class="tool-btn" data-tool="line" title="Line (L)">L</button>
+            <button class="tool-btn" data-tool="eyedropper" title="Eyedropper (I)">I</button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn" data-tool="mirror" title="Toggle Mirror (M)">M</button>
+            <button class="tool-btn" data-tool="undo" title="Undo (Ctrl+Z)">U</button>
+            <button class="tool-btn" data-tool="redo" title="Redo (Ctrl+Y)">R</button>
+        </div>
+
+        <!-- Canvas Area -->
+        <div id="canvas-container">
+            <div id="grid-overlay">Grid: 32x64x32 | Axis: XYZ</div>
+            <div id="coordinates">X: 0 Y: 0 Z: 0</div>
+        </div>
+
+        <!-- Right Panel -->
+        <div id="right-panel">
+            <div class="tabs">
+                <div class="tab active" data-tab="palette">Palette</div>
+                <div class="tab" data-tab="templates">Templates</div>
+                <div class="tab" data-tab="preview">Preview</div>
+                <div class="tab" data-tab="advanced">Advanced</div>
+            </div>
+
+            <!-- Palette Tab -->
+            <div class="tab-content active" id="tab-palette">
+                <div class="section-title">Color Palette (16 max)</div>
+                <div id="palette-grid"></div>
+
+                <div class="section-title">Color Editor</div>
+                <div id="color-picker-container">
+                    <div id="color-preview"></div>
+                    <div class="color-slider">
+                        <label><span>Red</span><span id="r-value">128</span></label>
+                        <input type="range" id="slider-r" min="0" max="255" value="128">
+                    </div>
+                    <div class="color-slider">
+                        <label><span>Green</span><span id="g-value">128</span></label>
+                        <input type="range" id="slider-g" min="0" max="255" value="128">
+                    </div>
+                    <div class="color-slider">
+                        <label><span>Blue</span><span id="b-value">128</span></label>
+                        <input type="range" id="slider-b" min="0" max="255" value="128">
+                    </div>
+                </div>
+
+                <div class="section-title">Settings</div>
+                <div class="toggle-row">
+                    <span>Mirror Mode</span>
+                    <div class="toggle active" id="toggle-mirror"></div>
+                </div>
+                <div class="toggle-row">
+                    <span>Show Grid</span>
+                    <div class="toggle active" id="toggle-grid"></div>
+                </div>
+                <div class="toggle-row">
+                    <span>Show Bones</span>
+                    <div class="toggle" id="toggle-bones"></div>
+                </div>
+            </div>
+
+            <!-- Templates Tab -->
+            <div class="tab-content" id="tab-templates">
+                <div class="section-title">Starter Templates</div>
+                <div id="templates-grid">
+                    <div class="template-card" data-template="human">
+                        <div class="template-icon">H</div>
+                        <div class="template-name">Human</div>
+                    </div>
+                    <div class="template-card" data-template="robot">
+                        <div class="template-icon">R</div>
+                        <div class="template-name">Robot</div>
+                    </div>
+                    <div class="template-card" data-template="cat">
+                        <div class="template-icon">C</div>
+                        <div class="template-name">Cat</div>
+                    </div>
+                    <div class="template-card" data-template="slime">
+                        <div class="template-icon">S</div>
+                        <div class="template-name">Slime</div>
+                    </div>
+                    <div class="template-card" data-template="ghost">
+                        <div class="template-icon">G</div>
+                        <div class="template-name">Ghost</div>
+                    </div>
+                    <div class="template-card" data-template="empty">
+                        <div class="template-icon">+</div>
+                        <div class="template-name">Empty</div>
+                    </div>
+                </div>
+
+                <div class="section-title" style="margin-top: 20px;">History</div>
+                <div id="history-list">
+                    <div class="history-item current">Initial state</div>
+                </div>
+            </div>
+
+            <!-- Preview Tab -->
+            <div class="tab-content" id="tab-preview">
+                <div class="section-title">Live Preview</div>
+                <div id="preview-canvas-container"></div>
+
+                <div class="preview-controls">
+                    <button class="preview-btn active" data-mode="cube">Cube</button>
+                    <button class="preview-btn" data-mode="smooth">Smooth</button>
+                </div>
+
+                <div class="section-title">Animation</div>
+                <div class="preview-controls">
+                    <button class="preview-btn" data-anim="idle">Idle</button>
+                    <button class="preview-btn" data-anim="walk">Walk</button>
+                    <button class="preview-btn" data-anim="wave">Wave</button>
+                </div>
+
+                <div class="section-title">Expressions</div>
+                <div class="expression-grid">
+                    <button class="expression-btn active" data-expr="neutral">
+                        <span class="expression-icon">:|</span>
+                        <span class="expression-name">Neutral</span>
+                    </button>
+                    <button class="expression-btn" data-expr="happy">
+                        <span class="expression-icon">:)</span>
+                        <span class="expression-name">Happy</span>
+                    </button>
+                    <button class="expression-btn" data-expr="sad">
+                        <span class="expression-icon">:(</span>
+                        <span class="expression-name">Sad</span>
+                    </button>
+                    <button class="expression-btn" data-expr="angry">
+                        <span class="expression-icon">>:(</span>
+                        <span class="expression-name">Angry</span>
+                    </button>
+                    <button class="expression-btn" data-expr="surprised">
+                        <span class="expression-icon">:O</span>
+                        <span class="expression-name">Surprised</span>
+                    </button>
+                    <button class="expression-btn" data-expr="blink">
+                        <span class="expression-icon">-_-</span>
+                        <span class="expression-name">Blink</span>
+                    </button>
+                </div>
+
+                <div class="toggle-row">
+                    <span>Auto-rotate</span>
+                    <div class="toggle active" id="toggle-autorotate"></div>
+                </div>
+            </div>
+
+            <!-- Advanced Tab -->
+            <div class="tab-content" id="tab-advanced">
+                <div class="section-title">Physics Regions</div>
+                <div class="physics-region">
+                    <div class="physics-region-name">
+                        <div class="physics-region-color" style="background: #ff6b6b"></div>
+                        <span>Hair</span>
+                    </div>
+                    <button class="preview-btn" style="width: auto; padding: 4px 10px;">Edit</button>
+                </div>
+                <div class="physics-region">
+                    <div class="physics-region-name">
+                        <div class="physics-region-color" style="background: #4ecdc4"></div>
+                        <span>Cape</span>
+                    </div>
+                    <button class="preview-btn" style="width: auto; padding: 4px 10px;">Edit</button>
+                </div>
+                <div class="physics-region">
+                    <div class="physics-region-name">
+                        <div class="physics-region-color" style="background: #a66cff"></div>
+                        <span>Tail</span>
+                    </div>
+                    <button class="preview-btn" style="width: auto; padding: 4px 10px;">Edit</button>
+                </div>
+                <div class="physics-region">
+                    <div class="physics-region-name">
+                        <div class="physics-region-color" style="background: #ffd93d"></div>
+                        <span>Ears</span>
+                    </div>
+                    <button class="preview-btn" style="width: auto; padding: 4px 10px;">Edit</button>
+                </div>
+
+                <div class="section-title" style="margin-top: 20px;">Render Settings</div>
+                <div class="toggle-row">
+                    <span>Emissive Voxels</span>
+                    <div class="toggle" id="toggle-emissive"></div>
+                </div>
+                <div class="toggle-row">
+                    <span>Transparency</span>
+                    <div class="toggle" id="toggle-transparency"></div>
+                </div>
+                <div class="toggle-row">
+                    <span>Cast Shadows</span>
+                    <div class="toggle active" id="toggle-shadows"></div>
+                </div>
+
+                <div class="section-title" style="margin-top: 20px;">Avatar Stats</div>
+                <div style="font-size: 12px; color: #888;">
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                        <span>Voxels:</span>
+                        <span id="stat-voxels">0 / 65,536</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                        <span>Colors Used:</span>
+                        <span id="stat-colors">0 / 16</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                        <span>Est. File Size:</span>
+                        <span id="stat-filesize">0 KB</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="status-bar">
+        <div>
+            <span class="shortcut">P</span> Pencil |
+            <span class="shortcut">E</span> Eraser |
+            <span class="shortcut">B</span> Paint |
+            <span class="shortcut">F</span> Fill |
+            <span class="shortcut">M</span> Mirror |
+            <span class="shortcut">Ctrl+Z</span> Undo |
+            <span class="shortcut">Ctrl+Y</span> Redo
+        </div>
+        <div id="status-message">Ready</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Avatar data constants
+        const AVATAR_WIDTH = 32;
+        const AVATAR_HEIGHT = 64;
+        const AVATAR_DEPTH = 32;
+        const MAX_PALETTE_SIZE = 16;
+        const VOXEL_SIZE = 0.1;
+
+        // Editor state
+        const state = {
+            currentTool: 'pencil',
+            currentColorIndex: 0,
+            mirrorMode: true,
+            showGrid: true,
+            showBones: false,
+            voxels: new Map(),
+            palette: [],
+            history: [],
+            historyIndex: -1
+        };
+
+        // Initialize default palette
+        function initPalette() {
+            state.palette = [
+                { r: 230, g: 180, b: 150 }, // Skin
+                { r: 100, g: 60, b: 40 },   // Hair
+                { r: 50, g: 100, b: 180 },  // Shirt
+                { r: 70, g: 70, b: 80 },    // Pants
+                { r: 40, g: 40, b: 50 },    // Shoes
+                { r: 200, g: 200, b: 200 }, // White
+                { r: 255, g: 100, b: 100 }, // Red accent
+                { r: 100, g: 200, b: 100 }, // Green accent
+            ];
+
+            updatePaletteUI();
+        }
+
+        function updatePaletteUI() {
+            const grid = document.getElementById('palette-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < MAX_PALETTE_SIZE; i++) {
+                const color = state.palette[i] || { r: 30, g: 30, b: 40 };
+                const div = document.createElement('div');
+                div.className = 'palette-color' + (i === state.currentColorIndex ? ' selected' : '');
+                div.style.background = `rgb(${color.r}, ${color.g}, ${color.b})`;
+                div.dataset.index = i;
+
+                div.addEventListener('click', () => selectColor(i));
+                grid.appendChild(div);
+            }
+        }
+
+        function selectColor(index) {
+            state.currentColorIndex = index;
+            updatePaletteUI();
+
+            const color = state.palette[index] || { r: 128, g: 128, b: 128 };
+            document.getElementById('slider-r').value = color.r;
+            document.getElementById('slider-g').value = color.g;
+            document.getElementById('slider-b').value = color.b;
+            updateColorPreview();
+        }
+
+        function updateColorPreview() {
+            const r = parseInt(document.getElementById('slider-r').value);
+            const g = parseInt(document.getElementById('slider-g').value);
+            const b = parseInt(document.getElementById('slider-b').value);
+
+            document.getElementById('r-value').textContent = r;
+            document.getElementById('g-value').textContent = g;
+            document.getElementById('b-value').textContent = b;
+
+            document.getElementById('color-preview').style.background = `rgb(${r}, ${g}, ${b})`;
+
+            // Update palette
+            if (!state.palette[state.currentColorIndex]) {
+                state.palette[state.currentColorIndex] = { r, g, b };
+            } else {
+                state.palette[state.currentColorIndex].r = r;
+                state.palette[state.currentColorIndex].g = g;
+                state.palette[state.currentColorIndex].b = b;
+            }
+
+            updatePaletteUI();
+            updateEditorMesh();
+        }
+
+        // Main editor scene
+        let editorScene, editorCamera, editorRenderer, editorControls;
+        let gridHelper, boneHelper;
+        let voxelMesh, hoverIndicator;
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+
+        function initEditorScene() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Renderer
+            editorRenderer = new THREE.WebGLRenderer({ antialias: true });
+            editorRenderer.setSize(width, height);
+            editorRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(editorRenderer.domElement);
+
+            // Scene
+            editorScene = new THREE.Scene();
+            editorScene.background = new THREE.Color(0x1a1a2e);
+
+            // Camera
+            editorCamera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
+            editorCamera.position.set(5, 5, 5);
+
+            // Controls
+            editorControls = new OrbitControls(editorCamera, editorRenderer.domElement);
+            editorControls.enableDamping = true;
+            editorControls.target.set(0, 3, 0);
+
+            // Lighting
+            const ambient = new THREE.AmbientLight(0x606060);
+            editorScene.add(ambient);
+
+            const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+            directional.position.set(5, 10, 5);
+            editorScene.add(directional);
+
+            const backLight = new THREE.DirectionalLight(0x4080ff, 0.3);
+            backLight.position.set(-5, 5, -5);
+            editorScene.add(backLight);
+
+            // Grid
+            gridHelper = new THREE.GridHelper(AVATAR_WIDTH * VOXEL_SIZE, AVATAR_WIDTH, 0x444466, 0x333344);
+            gridHelper.position.y = 0;
+            editorScene.add(gridHelper);
+
+            // Vertical grid planes
+            const verticalGrid = createVerticalGrids();
+            editorScene.add(verticalGrid);
+
+            // Bounding box
+            const boundingBox = new THREE.BoxHelper(
+                new THREE.Mesh(new THREE.BoxGeometry(
+                    AVATAR_WIDTH * VOXEL_SIZE,
+                    AVATAR_HEIGHT * VOXEL_SIZE,
+                    AVATAR_DEPTH * VOXEL_SIZE
+                )),
+                0x444466
+            );
+            boundingBox.position.set(0, AVATAR_HEIGHT * VOXEL_SIZE / 2, 0);
+            editorScene.add(boundingBox);
+
+            // Hover indicator
+            const indicatorGeometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+            const indicatorMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00ff00,
+                transparent: true,
+                opacity: 0.5,
+                wireframe: true
+            });
+            hoverIndicator = new THREE.Mesh(indicatorGeometry, indicatorMaterial);
+            hoverIndicator.visible = false;
+            editorScene.add(hoverIndicator);
+
+            // Mouse events
+            editorRenderer.domElement.addEventListener('mousemove', onEditorMouseMove);
+            editorRenderer.domElement.addEventListener('mousedown', onEditorMouseDown);
+            editorRenderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+
+            // Load default template
+            loadTemplate('human');
+        }
+
+        function createVerticalGrids() {
+            const group = new THREE.Group();
+            const material = new THREE.LineBasicMaterial({ color: 0x333344, transparent: true, opacity: 0.3 });
+
+            // XZ plane at different Y levels
+            for (let y = 0; y <= AVATAR_HEIGHT; y += 8) {
+                const points = [];
+                for (let x = 0; x <= AVATAR_WIDTH; x++) {
+                    points.push(new THREE.Vector3(
+                        (x - AVATAR_WIDTH / 2) * VOXEL_SIZE,
+                        y * VOXEL_SIZE,
+                        -AVATAR_DEPTH / 2 * VOXEL_SIZE
+                    ));
+                    points.push(new THREE.Vector3(
+                        (x - AVATAR_WIDTH / 2) * VOXEL_SIZE,
+                        y * VOXEL_SIZE,
+                        AVATAR_DEPTH / 2 * VOXEL_SIZE
+                    ));
+                }
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.LineSegments(geometry, material);
+                group.add(line);
+            }
+
+            return group;
+        }
+
+        function getVoxelKey(x, y, z) {
+            return `${x},${y},${z}`;
+        }
+
+        function setVoxel(x, y, z, colorIndex) {
+            const key = getVoxelKey(x, y, z);
+            if (colorIndex === null) {
+                state.voxels.delete(key);
+            } else {
+                state.voxels.set(key, colorIndex);
+            }
+
+            // Mirror mode
+            if (state.mirrorMode && x !== AVATAR_WIDTH / 2) {
+                const mirrorX = AVATAR_WIDTH - 1 - x;
+                const mirrorKey = getVoxelKey(mirrorX, y, z);
+                if (colorIndex === null) {
+                    state.voxels.delete(mirrorKey);
+                } else {
+                    state.voxels.set(mirrorKey, colorIndex);
+                }
+            }
+        }
+
+        function updateEditorMesh() {
+            if (voxelMesh) {
+                editorScene.remove(voxelMesh);
+                voxelMesh.geometry.dispose();
+                voxelMesh.material.dispose();
+            }
+
+            if (state.voxels.size === 0) return;
+
+            const positions = [];
+            const colors = [];
+
+            for (const [key, colorIndex] of state.voxels) {
+                const [x, y, z] = key.split(',').map(Number);
+                const color = state.palette[colorIndex] || { r: 128, g: 128, b: 128 };
+
+                addCubeVertices(positions, colors, x, y, z, color);
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geometry.computeVertexNormals();
+
+            const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+            voxelMesh = new THREE.Mesh(geometry, material);
+            editorScene.add(voxelMesh);
+
+            updateStats();
+        }
+
+        function addCubeVertices(positions, colors, x, y, z, color) {
+            const s = VOXEL_SIZE * 0.5;
+            const cx = (x - AVATAR_WIDTH / 2 + 0.5) * VOXEL_SIZE;
+            const cy = y * VOXEL_SIZE + s;
+            const cz = (z - AVATAR_DEPTH / 2 + 0.5) * VOXEL_SIZE;
+
+            const r = color.r / 255;
+            const g = color.g / 255;
+            const b = color.b / 255;
+
+            // Each face
+            const faces = [
+                // Front
+                [[cx - s, cy - s, cz + s], [cx + s, cy - s, cz + s], [cx + s, cy + s, cz + s],
+                 [cx - s, cy - s, cz + s], [cx + s, cy + s, cz + s], [cx - s, cy + s, cz + s]],
+                // Back
+                [[cx + s, cy - s, cz - s], [cx - s, cy - s, cz - s], [cx - s, cy + s, cz - s],
+                 [cx + s, cy - s, cz - s], [cx - s, cy + s, cz - s], [cx + s, cy + s, cz - s]],
+                // Top
+                [[cx - s, cy + s, cz - s], [cx - s, cy + s, cz + s], [cx + s, cy + s, cz + s],
+                 [cx - s, cy + s, cz - s], [cx + s, cy + s, cz + s], [cx + s, cy + s, cz - s]],
+                // Bottom
+                [[cx - s, cy - s, cz + s], [cx - s, cy - s, cz - s], [cx + s, cy - s, cz - s],
+                 [cx - s, cy - s, cz + s], [cx + s, cy - s, cz - s], [cx + s, cy - s, cz + s]],
+                // Right
+                [[cx + s, cy - s, cz + s], [cx + s, cy - s, cz - s], [cx + s, cy + s, cz - s],
+                 [cx + s, cy - s, cz + s], [cx + s, cy + s, cz - s], [cx + s, cy + s, cz + s]],
+                // Left
+                [[cx - s, cy - s, cz - s], [cx - s, cy - s, cz + s], [cx - s, cy + s, cz + s],
+                 [cx - s, cy - s, cz - s], [cx - s, cy + s, cz + s], [cx - s, cy + s, cz - s]]
+            ];
+
+            for (const face of faces) {
+                for (const vertex of face) {
+                    positions.push(vertex[0], vertex[1], vertex[2]);
+                    colors.push(r, g, b);
+                }
+            }
+        }
+
+        function loadTemplate(templateName) {
+            state.voxels.clear();
+
+            switch (templateName) {
+                case 'human':
+                    generateHumanTemplate();
+                    break;
+                case 'robot':
+                    generateRobotTemplate();
+                    break;
+                case 'cat':
+                    generateCatTemplate();
+                    break;
+                case 'slime':
+                    generateSlimeTemplate();
+                    break;
+                case 'ghost':
+                    generateGhostTemplate();
+                    break;
+                case 'empty':
+                default:
+                    break;
+            }
+
+            updateEditorMesh();
+            addHistoryEntry(`Loaded template: ${templateName}`);
+        }
+
+        function generateHumanTemplate() {
+            // Head
+            for (let y = 56; y < 64; y++) {
+                for (let x = 12; x < 20; x++) {
+                    for (let z = 12; z < 20; z++) {
+                        setVoxel(x, y, z, 0); // Skin color
+                    }
+                }
+            }
+
+            // Hair
+            for (let y = 62; y < 64; y++) {
+                for (let x = 11; x < 21; x++) {
+                    for (let z = 11; z < 21; z++) {
+                        setVoxel(x, y, z, 1); // Hair color
+                    }
+                }
+            }
+
+            // Torso
+            for (let y = 36; y < 56; y++) {
+                for (let x = 11; x < 21; x++) {
+                    for (let z = 13; z < 19; z++) {
+                        setVoxel(x, y, z, 2); // Shirt color
+                    }
+                }
+            }
+
+            // Arms
+            for (let y = 40; y < 56; y++) {
+                for (let x = 6; x < 11; x++) {
+                    for (let z = 14; z < 18; z++) {
+                        setVoxel(x, y, z, y < 44 ? 0 : 2); // Skin or shirt
+                    }
+                }
+                for (let x = 21; x < 26; x++) {
+                    for (let z = 14; z < 18; z++) {
+                        setVoxel(x, y, z, y < 44 ? 0 : 2);
+                    }
+                }
+            }
+
+            // Legs
+            for (let y = 0; y < 36; y++) {
+                for (let x = 12; x < 16; x++) {
+                    for (let z = 14; z < 18; z++) {
+                        setVoxel(x, y, z, y < 4 ? 4 : 3); // Shoes or pants
+                    }
+                }
+                for (let x = 16; x < 20; x++) {
+                    for (let z = 14; z < 18; z++) {
+                        setVoxel(x, y, z, y < 4 ? 4 : 3);
+                    }
+                }
+            }
+        }
+
+        function generateRobotTemplate() {
+            // Boxy head
+            for (let y = 52; y < 64; y++) {
+                for (let x = 10; x < 22; x++) {
+                    for (let z = 10; z < 22; z++) {
+                        setVoxel(x, y, z, 5); // Silver
+                    }
+                }
+            }
+
+            // Eyes (emissive)
+            setVoxel(12, 58, 10, 6);
+            setVoxel(19, 58, 10, 6);
+
+            // Body
+            for (let y = 32; y < 52; y++) {
+                for (let x = 8; x < 24; x++) {
+                    for (let z = 12; z < 20; z++) {
+                        setVoxel(x, y, z, 5);
+                    }
+                }
+            }
+
+            // Legs
+            for (let y = 0; y < 32; y++) {
+                for (let x = 10; x < 16; x++) {
+                    for (let z = 13; z < 19; z++) {
+                        setVoxel(x, y, z, 4);
+                    }
+                }
+                for (let x = 16; x < 22; x++) {
+                    for (let z = 13; z < 19; z++) {
+                        setVoxel(x, y, z, 4);
+                    }
+                }
+            }
+        }
+
+        function generateCatTemplate() {
+            // Head
+            for (let y = 50; y < 60; y++) {
+                for (let x = 11; x < 21; x++) {
+                    for (let z = 11; z < 21; z++) {
+                        setVoxel(x, y, z, 1);
+                    }
+                }
+            }
+
+            // Ears
+            for (let y = 60; y < 64; y++) {
+                setVoxel(12, y, 14, 1);
+                setVoxel(13, y, 14, 1);
+                setVoxel(19, y, 14, 1);
+                setVoxel(18, y, 14, 1);
+            }
+
+            // Body
+            for (let y = 20; y < 50; y++) {
+                for (let x = 10; x < 22; x++) {
+                    for (let z = 8; z < 24; z++) {
+                        if (Math.abs(x - 16) + Math.abs(z - 16) < 10) {
+                            setVoxel(x, y, z, 1);
+                        }
+                    }
+                }
+            }
+
+            // Legs
+            for (let y = 0; y < 20; y++) {
+                for (let x = 11; x < 14; x++) {
+                    for (let z = 10; z < 13; z++) {
+                        setVoxel(x, y, z, 1);
+                    }
+                }
+                for (let x = 18; x < 21; x++) {
+                    for (let z = 10; z < 13; z++) {
+                        setVoxel(x, y, z, 1);
+                    }
+                }
+                for (let x = 11; x < 14; x++) {
+                    for (let z = 19; z < 22; z++) {
+                        setVoxel(x, y, z, 1);
+                    }
+                }
+                for (let x = 18; x < 21; x++) {
+                    for (let z = 19; z < 22; z++) {
+                        setVoxel(x, y, z, 1);
+                    }
+                }
+            }
+
+            // Tail
+            for (let z = 24; z < 32; z++) {
+                setVoxel(16, 30 + (z - 24), z, 1);
+            }
+        }
+
+        function generateSlimeTemplate() {
+            const centerX = 16;
+            const centerZ = 16;
+            const centerY = 20;
+
+            for (let y = 0; y < 40; y++) {
+                for (let x = 0; x < 32; x++) {
+                    for (let z = 0; z < 32; z++) {
+                        const dx = x - centerX;
+                        const dy = (y - centerY) * 1.3;
+                        const dz = z - centerZ;
+                        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+                        if (dist < 15) {
+                            setVoxel(x, y, z, 7); // Green
+                        }
+                    }
+                }
+            }
+
+            // Eyes
+            setVoxel(12, 28, 8, 5);
+            setVoxel(20, 28, 8, 5);
+        }
+
+        function generateGhostTemplate() {
+            // Head/body (rounded top)
+            for (let y = 20; y < 60; y++) {
+                const radius = y > 50 ? (60 - y) : 10;
+                for (let x = 6; x < 26; x++) {
+                    for (let z = 10; z < 22; z++) {
+                        const dx = x - 16;
+                        const dz = z - 16;
+                        if (dx*dx + dz*dz < radius * radius) {
+                            setVoxel(x, y, z, 5); // White
+                        }
+                    }
+                }
+            }
+
+            // Wavy bottom
+            for (let x = 8; x < 24; x++) {
+                const wave = Math.floor(Math.sin(x * 0.8) * 3) + 20;
+                for (let y = wave - 5; y < wave; y++) {
+                    for (let z = 11; z < 21; z++) {
+                        setVoxel(x, y, z, 5);
+                    }
+                }
+            }
+
+            // Eyes
+            setVoxel(12, 45, 10, 4);
+            setVoxel(13, 45, 10, 4);
+            setVoxel(19, 45, 10, 4);
+            setVoxel(20, 45, 10, 4);
+        }
+
+        function onEditorMouseMove(event) {
+            const rect = editorRenderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, editorCamera);
+
+            // Intersect with ground plane
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const intersection = new THREE.Vector3();
+
+            if (raycaster.ray.intersectPlane(plane, intersection)) {
+                // Convert to voxel coordinates
+                const vx = Math.floor(intersection.x / VOXEL_SIZE + AVATAR_WIDTH / 2);
+                const vy = 0;
+                const vz = Math.floor(intersection.z / VOXEL_SIZE + AVATAR_DEPTH / 2);
+
+                if (vx >= 0 && vx < AVATAR_WIDTH && vz >= 0 && vz < AVATAR_DEPTH) {
+                    hoverIndicator.position.set(
+                        (vx - AVATAR_WIDTH / 2 + 0.5) * VOXEL_SIZE,
+                        VOXEL_SIZE / 2,
+                        (vz - AVATAR_DEPTH / 2 + 0.5) * VOXEL_SIZE
+                    );
+                    hoverIndicator.visible = true;
+
+                    document.getElementById('coordinates').textContent = `X: ${vx} Y: ${vy} Z: ${vz}`;
+                } else {
+                    hoverIndicator.visible = false;
+                }
+            }
+        }
+
+        function onEditorMouseDown(event) {
+            if (event.button === 0 && hoverIndicator.visible) {
+                // Get voxel position from hover indicator
+                const vx = Math.floor(hoverIndicator.position.x / VOXEL_SIZE + AVATAR_WIDTH / 2);
+                const vz = Math.floor(hoverIndicator.position.z / VOXEL_SIZE + AVATAR_DEPTH / 2);
+
+                switch (state.currentTool) {
+                    case 'pencil':
+                        setVoxel(vx, 0, vz, state.currentColorIndex);
+                        addHistoryEntry('Added voxel');
+                        break;
+                    case 'eraser':
+                        setVoxel(vx, 0, vz, null);
+                        addHistoryEntry('Removed voxel');
+                        break;
+                    case 'paint':
+                        if (state.voxels.has(getVoxelKey(vx, 0, vz))) {
+                            setVoxel(vx, 0, vz, state.currentColorIndex);
+                            addHistoryEntry('Painted voxel');
+                        }
+                        break;
+                    case 'eyedropper':
+                        const key = getVoxelKey(vx, 0, vz);
+                        if (state.voxels.has(key)) {
+                            selectColor(state.voxels.get(key));
+                            setStatusMessage('Color picked');
+                        }
+                        break;
+                }
+
+                updateEditorMesh();
+            }
+        }
+
+        function addHistoryEntry(action) {
+            state.history.push({
+                action,
+                voxels: new Map(state.voxels),
+                timestamp: Date.now()
+            });
+
+            state.historyIndex = state.history.length - 1;
+            updateHistoryUI();
+        }
+
+        function updateHistoryUI() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+
+            const recent = state.history.slice(-10);
+            recent.forEach((entry, i) => {
+                const div = document.createElement('div');
+                div.className = 'history-item' + (i === recent.length - 1 ? ' current' : '');
+                div.innerHTML = `
+                    <span>${entry.action}</span>
+                    <span>${new Date(entry.timestamp).toLocaleTimeString()}</span>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function updateStats() {
+            document.getElementById('stat-voxels').textContent = `${state.voxels.size} / 65,536`;
+
+            const usedColors = new Set(state.voxels.values());
+            document.getElementById('stat-colors').textContent = `${usedColors.size} / 16`;
+
+            // Estimate file size (rough: 4 bytes per voxel + header)
+            const estimatedSize = (state.voxels.size * 4 + 256) / 1024;
+            document.getElementById('stat-filesize').textContent = `~${estimatedSize.toFixed(1)} KB`;
+        }
+
+        function setStatusMessage(msg) {
+            document.getElementById('status-message').textContent = msg;
+        }
+
+        // Preview scene
+        let previewScene, previewCamera, previewRenderer, previewControls;
+        let previewMesh, previewAnimating = true;
+
+        function initPreviewScene() {
+            const container = document.getElementById('preview-canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            previewRenderer = new THREE.WebGLRenderer({ antialias: true });
+            previewRenderer.setSize(width, height);
+            container.appendChild(previewRenderer.domElement);
+
+            previewScene = new THREE.Scene();
+            previewScene.background = new THREE.Color(0x1a1a2e);
+
+            previewCamera = new THREE.PerspectiveCamera(50, width / height, 0.1, 50);
+            previewCamera.position.set(3, 3, 3);
+
+            previewControls = new OrbitControls(previewCamera, previewRenderer.domElement);
+            previewControls.enableDamping = true;
+            previewControls.autoRotate = true;
+            previewControls.autoRotateSpeed = 2;
+            previewControls.target.set(0, 1.5, 0);
+
+            const ambient = new THREE.AmbientLight(0x606060);
+            previewScene.add(ambient);
+
+            const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+            directional.position.set(3, 5, 3);
+            previewScene.add(directional);
+
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(5, 5),
+                new THREE.MeshStandardMaterial({ color: 0x2a2a4a })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            previewScene.add(ground);
+        }
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            editorControls.update();
+            editorRenderer.render(editorScene, editorCamera);
+
+            if (previewControls) {
+                previewControls.update();
+                previewRenderer.render(previewScene, previewCamera);
+            }
+        }
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+            });
+        });
+
+        // Tool switching
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tool = btn.dataset.tool;
+
+                if (tool === 'undo') {
+                    if (state.historyIndex > 0) {
+                        state.historyIndex--;
+                        state.voxels = new Map(state.history[state.historyIndex].voxels);
+                        updateEditorMesh();
+                        updateHistoryUI();
+                    }
+                    return;
+                }
+
+                if (tool === 'redo') {
+                    if (state.historyIndex < state.history.length - 1) {
+                        state.historyIndex++;
+                        state.voxels = new Map(state.history[state.historyIndex].voxels);
+                        updateEditorMesh();
+                        updateHistoryUI();
+                    }
+                    return;
+                }
+
+                if (tool === 'mirror') {
+                    state.mirrorMode = !state.mirrorMode;
+                    btn.classList.toggle('active', state.mirrorMode);
+                    document.getElementById('toggle-mirror').classList.toggle('active', state.mirrorMode);
+                    return;
+                }
+
+                document.querySelectorAll('.tool-btn').forEach(b => {
+                    if (!['mirror', 'undo', 'redo'].includes(b.dataset.tool)) {
+                        b.classList.remove('active');
+                    }
+                });
+                btn.classList.add('active');
+                state.currentTool = tool;
+                setStatusMessage(`Tool: ${tool}`);
+            });
+        });
+
+        // Template cards
+        document.querySelectorAll('.template-card').forEach(card => {
+            card.addEventListener('click', () => {
+                loadTemplate(card.dataset.template);
+                setStatusMessage(`Loaded: ${card.dataset.template}`);
+            });
+        });
+
+        // Color sliders
+        ['slider-r', 'slider-g', 'slider-b'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateColorPreview);
+        });
+
+        // Toggle handlers
+        document.querySelectorAll('.toggle').forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                toggle.classList.toggle('active');
+
+                if (toggle.id === 'toggle-mirror') {
+                    state.mirrorMode = toggle.classList.contains('active');
+                }
+                if (toggle.id === 'toggle-grid') {
+                    gridHelper.visible = toggle.classList.contains('active');
+                }
+                if (toggle.id === 'toggle-autorotate' && previewControls) {
+                    previewControls.autoRotate = toggle.classList.contains('active');
+                }
+            });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey) {
+                if (e.key === 'z') {
+                    e.preventDefault();
+                    document.querySelector('[data-tool="undo"]').click();
+                } else if (e.key === 'y') {
+                    e.preventDefault();
+                    document.querySelector('[data-tool="redo"]').click();
+                } else if (e.key === 's') {
+                    e.preventDefault();
+                    setStatusMessage('Saved!');
+                }
+            } else {
+                switch (e.key.toLowerCase()) {
+                    case 'p': document.querySelector('[data-tool="pencil"]').click(); break;
+                    case 'e': document.querySelector('[data-tool="eraser"]').click(); break;
+                    case 'b': document.querySelector('[data-tool="paint"]').click(); break;
+                    case 'f': document.querySelector('[data-tool="fill"]').click(); break;
+                    case 'i': document.querySelector('[data-tool="eyedropper"]').click(); break;
+                    case 'm': document.querySelector('[data-tool="mirror"]').click(); break;
+                }
+            }
+        });
+
+        // Window resize
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            editorCamera.aspect = width / height;
+            editorCamera.updateProjectionMatrix();
+            editorRenderer.setSize(width, height);
+        });
+
+        // Initialize
+        initPalette();
+        initEditorScene();
+        initPreviewScene();
+        animate();
+
+        console.log('Voxel Avatar Editor Test initialized');
+    </script>
+</body>
+</html>

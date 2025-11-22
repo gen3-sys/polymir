@@ -49,6 +49,26 @@ export class NBT {
             this.writeInt(buffer, voxel.color || 0x808080);
         }
 
+        // Write layer indices if present
+        const hasLayers = Array.from(voxels.values()).some(v => v.layerIndex !== undefined && v.layerIndex !== 0);
+        if (hasLayers) {
+            this.writeTag(buffer, this.TAG_INT_ARRAY, 'layerIndices');
+            this.writeInt(buffer, voxels.size);
+            for (const [, voxel] of voxels) {
+                this.writeInt(buffer, voxel.layerIndex || 0);
+            }
+        }
+
+        // Write semantics if present
+        const hasSemantics = Array.from(voxels.values()).some(v => v.semantics !== undefined);
+        if (hasSemantics) {
+            this.writeTag(buffer, this.TAG_INT_ARRAY, 'semantics');
+            this.writeInt(buffer, voxels.size);
+            for (const [, voxel] of voxels) {
+                this.writeInt(buffer, voxel.semantics || 0);
+            }
+        }
+
         this.writeByte(buffer, this.TAG_END);
 
         return new Uint8Array(buffer);
@@ -71,6 +91,8 @@ export class NBT {
 
         let positions = [];
         let colors = [];
+        let layerIndices = [];
+        let semantics = [];
 
         while (offset < data.length) {
             const tagType = view.getUint8(offset++);
@@ -102,6 +124,10 @@ export class NBT {
                         positions = array;
                     } else if (name === 'colors') {
                         colors = array;
+                    } else if (name === 'layerIndices') {
+                        layerIndices = array;
+                    } else if (name === 'semantics') {
+                        semantics = array;
                     }
                     break;
 
@@ -111,9 +137,19 @@ export class NBT {
         }
 
         for (let i = 0; i < positions.length; i++) {
-            voxels.set(positions[i], {
+            const voxelData = {
                 color: colors[i]
-            });
+            };
+
+            if (layerIndices.length > 0) {
+                voxelData.layerIndex = layerIndices[i];
+            }
+
+            if (semantics.length > 0) {
+                voxelData.semantics = semantics[i];
+            }
+
+            voxels.set(positions[i], voxelData);
         }
 
         return { voxels, metadata };

@@ -1,9 +1,62 @@
+import { LayerConfiguration } from './LayerConfiguration.js';
+import { LayeredVoxelData } from './LayeredVoxelData.js';
+
 export class WorldLayerSystem {
     constructor() {
         this.originalWorld = new Map();
         this.damageMap = new Set();
         this.worldMods = new Map();
         this.voxelLayers = new Map();
+
+        // New hierarchical layer system
+        this.layerConfig = null;
+        this.layeredData = null;
+    }
+
+    /**
+     * Initialize hierarchical layer system
+     * @param {number} numLayers - Number of layers to create
+     * @param {string} defaultRenderMode - Default render mode for layers > 0
+     */
+    initializeLayerSystem(numLayers = 1, defaultRenderMode = 'block') {
+        this.layerConfig = LayerConfiguration.createSimple(numLayers, defaultRenderMode);
+        this.layeredData = new LayeredVoxelData(this.layerConfig);
+        return this.layerConfig;
+    }
+
+    /**
+     * Get layer configuration
+     */
+    getLayerConfiguration() {
+        return this.layerConfig;
+    }
+
+    /**
+     * Get layered voxel data
+     */
+    getLayeredData() {
+        return this.layeredData;
+    }
+
+    /**
+     * Set voxel in layered system
+     * @param {number} layerIndex - Layer index
+     * @param {Array<number>} position - [x, y, z] in layer-local coordinates
+     * @param {Object} voxelData - Voxel data
+     */
+    setLayeredVoxel(layerIndex, position, voxelData) {
+        if (!this.layeredData) {
+            this.initializeLayerSystem();
+        }
+        this.layeredData.setVoxel(layerIndex, position, voxelData);
+    }
+
+    /**
+     * Get voxel from layered system
+     */
+    getLayeredVoxel(layerIndex, position) {
+        if (!this.layeredData) return null;
+        return this.layeredData.getVoxel(layerIndex, position);
     }
 
     setOriginalWorld(voxels) {
@@ -154,12 +207,29 @@ export class WorldLayerSystem {
     }
 
     save() {
-        return {
+        const saveData = {
             originalWorld: Array.from(this.originalWorld.entries()),
             damageMap: Array.from(this.damageMap),
             worldMods: Array.from(this.worldMods.entries()),
             voxelLayers: Array.from(this.voxelLayers.entries())
         };
+
+        // Save layered system if initialized
+        if (this.layerConfig && this.layeredData) {
+            saveData.layerConfiguration = this.layerConfig.toJSON();
+            saveData.layeredVoxels = {
+                layers: []
+            };
+
+            for (const [layerIndex, layerMap] of this.layeredData.layerData) {
+                saveData.layeredVoxels.layers.push({
+                    index: layerIndex,
+                    voxels: Array.from(layerMap.entries())
+                });
+            }
+        }
+
+        return saveData;
     }
 
     load(data) {
@@ -174,6 +244,22 @@ export class WorldLayerSystem {
         }
         if (data.voxelLayers) {
             this.voxelLayers = new Map(data.voxelLayers);
+        }
+
+        // Load layered system if present
+        if (data.layerConfiguration) {
+            this.layerConfig = LayerConfiguration.fromJSON(data.layerConfiguration);
+            this.layeredData = new LayeredVoxelData(this.layerConfig);
+
+            if (data.layeredVoxels && data.layeredVoxels.layers) {
+                for (const layerData of data.layeredVoxels.layers) {
+                    const layerMap = new Map(layerData.voxels);
+                    this.layeredData.layerData.set(layerData.index, layerMap);
+
+                    // Update voxel count
+                    this.layerConfig.updateVoxelCount(layerData.index, layerMap.size);
+                }
+            }
         }
     }
 }

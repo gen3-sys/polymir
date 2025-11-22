@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Config Panel Test - POLYMIR</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 50%, #0a0a2a 100%);
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: #00FF00;
+            overflow-x: hidden;
+        }
+
+        .page-header {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-bottom: 2px solid #FE0089;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .page-title {
+            color: #00FFFF;
+            font-size: 24px;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+
+        .page-subtitle {
+            color: #888;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .header-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #FE0089 0%, #0088FF 100%);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .header-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(254, 0, 137, 0.4);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 450px 1fr;
+            gap: 20px;
+            padding: 20px;
+            min-height: calc(100vh - 100px);
+        }
+
+        .config-container {
+            max-height: calc(100vh - 140px);
+        }
+
+        .preview-container {
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid #0088FF;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0088FF;
+        }
+
+        .preview-title {
+            color: #FFD700;
+            font-size: 16px;
+        }
+
+        .preview-tabs {
+            display: flex;
+            gap: 5px;
+        }
+
+        .preview-tab {
+            padding: 5px 12px;
+            background: rgba(0, 136, 255, 0.2);
+            border: 1px solid #0088FF;
+            border-radius: 4px;
+            color: #0088FF;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .preview-tab:hover {
+            background: rgba(0, 136, 255, 0.3);
+        }
+
+        .preview-tab.active {
+            background: #0088FF;
+            color: white;
+        }
+
+        .preview-content {
+            flex: 1;
+            overflow: auto;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        #hierarchy-view {
+            font-size: 11px;
+        }
+
+        .galaxy-node {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(100, 100, 255, 0.1);
+            border-left: 3px solid #6B8AFF;
+            border-radius: 4px;
+        }
+
+        .galaxy-name {
+            color: #6B8AFF;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .system-node {
+            margin: 8px 0 8px 20px;
+            padding: 8px;
+            background: rgba(255, 215, 0, 0.1);
+            border-left: 2px solid #FFD700;
+            border-radius: 3px;
+        }
+
+        .system-name {
+            color: #FFD700;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .body-node {
+            margin: 5px 0 5px 15px;
+            padding: 6px 10px;
+            background: rgba(0, 255, 0, 0.05);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .body-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 1px solid;
+        }
+
+        .body-info {
+            flex: 1;
+        }
+
+        .body-type {
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .body-details {
+            font-size: 9px;
+            color: #666;
+        }
+
+        .stats-panel {
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(0, 50, 100, 0.3);
+            border-radius: 8px;
+            border: 1px solid #0088FF;
+        }
+
+        .stats-title {
+            color: #00FFFF;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 11px;
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #00FF00;
+            font-weight: bold;
+        }
+
+        .json-output {
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            white-space: pre-wrap;
+            color: #00FF00;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 100%;
+            overflow: auto;
+        }
+
+        .log-container {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .log-entry {
+            font-size: 10px;
+            margin: 3px 0;
+            padding: 3px 5px;
+            border-radius: 2px;
+        }
+
+        .log-info { color: #00FFFF; }
+        .log-success { color: #00FF00; background: rgba(0, 255, 0, 0.1); }
+        .log-warning { color: #FFD700; background: rgba(255, 215, 0, 0.1); }
+        .log-error { color: #FF4444; background: rgba(255, 0, 0, 0.1); }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 20, 40, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #FE0089 0%, #0088FF 100%);
+            border-radius: 4px;
+        }
+
+        .generation-progress {
+            margin-top: 10px;
+            height: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #0088FF;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #FE0089 0%, #0088FF 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <div>
+            <div class="page-title">POLYMIR Server Configuration Test</div>
+            <div class="page-subtitle">Configure world generation parameters and preview generated seeds</div>
+        </div>
+        <div class="header-actions">
+            <button class="header-btn" onclick="generateFullPreview()">Generate Full Preview</button>
+            <button class="header-btn" onclick="saveToLocalStorage()">Save Config</button>
+            <button class="header-btn" onclick="loadFromLocalStorage()">Load Config</button>
+            <button class="header-btn" style="background: linear-gradient(135deg, #FF4444 0%, #AA0000 100%);" onclick="clearWorldData()">Clear World Data</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div id="config-panel-container" class="config-container"></div>
+
+        <div class="preview-container">
+            <div class="preview-header">
+                <div class="preview-title">Generation Preview</div>
+                <div class="preview-tabs">
+                    <div class="preview-tab active" onclick="switchPreviewTab('hierarchy')">Hierarchy</div>
+                    <div class="preview-tab" onclick="switchPreviewTab('json')">JSON Output</div>
+                    <div class="preview-tab" onclick="switchPreviewTab('stats')">Statistics</div>
+                </div>
+            </div>
+
+            <div class="generation-progress" id="generation-progress" style="display: none;">
+                <div class="progress-bar" id="progress-bar" style="width: 0%;">0%</div>
+            </div>
+
+            <div class="preview-content" id="preview-content">
+                <div id="hierarchy-view">
+                    <div style="color: #666; text-align: center; padding: 50px;">
+                        Click "Generate Full Preview" to see the generated universe hierarchy.
+                    </div>
+                </div>
+                <div id="json-view" style="display: none;"></div>
+                <div id="stats-view" style="display: none;"></div>
+            </div>
+
+            <div class="stats-panel">
+                <div class="stats-title">Quick Stats</div>
+                <div class="stat-row">
+                    <span class="stat-label">Master Seed:</span>
+                    <span class="stat-value" id="stat-seed">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Galaxies:</span>
+                    <span class="stat-value" id="stat-galaxies">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Systems:</span>
+                    <span class="stat-value" id="stat-systems">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Total Bodies:</span>
+                    <span class="stat-value" id="stat-bodies">-</span>
+                </div>
+            </div>
+
+            <div class="log-container" id="log-container"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { ServerConfigPanel } from '../src/ui/components/ServerConfigPanel.js';
+        import { GravitationalShapeConfig, GravitationalShapes } from '../src/config/GravitationalShapeConfig.js';
+        import { BiomeConfiguration } from '../src/config/BiomeConfiguration.js';
+        import { WorldDataManager } from '../src/world/WorldDataManager.js';
+
+        // Initialize the config panel
+        const container = document.getElementById('config-panel-container');
+        const configPanel = new ServerConfigPanel({
+            container: container,
+            onConfigChanged: (config) => {
+                log('Configuration changed', 'info');
+                updateQuickStats();
+            }
+        });
+
+        // Initialize WorldDataManager
+        const worldDataManager = new WorldDataManager({
+            serverConfig: configPanel,
+            onDataLoaded: (info) => log(`Loaded ${info.type} from storage`, 'info'),
+            onDataGenerated: (info) => log(`Generated new ${info.type} (seed: ${info.data.seed})`, 'success'),
+            onDataSaved: (info) => log(`Saved ${info.type} to storage`, 'info')
+        });
+
+        // Initialize storage
+        worldDataManager.initialize().then(() => {
+            log('WorldDataManager initialized', 'success');
+        });
+
+        // Make globally accessible
+        window.configPanel = configPanel;
+        window.worldDataManager = worldDataManager;
+        window.ServerConfigPanel = ServerConfigPanel;
+        window.GravitationalShapeConfig = GravitationalShapeConfig;
+        window.GravitationalShapes = GravitationalShapes;
+        window.BiomeConfiguration = BiomeConfiguration;
+        window.WorldDataManager = WorldDataManager;
+
+        // Logging system
+        const logContainer = document.getElementById('log-container');
+        const logs = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.unshift({ time: timestamp, message, type });
+            if (logs.length > 50) logs.pop();
+
+            logContainer.innerHTML = logs.map(l =>
+                `<div class="log-entry log-${l.type}">[${l.time}] ${l.message}</div>`
+            ).join('');
+
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        window.log = log;
+
+        // Update quick stats
+        function updateQuickStats() {
+            document.getElementById('stat-seed').textContent = configPanel.masterSeed;
+            document.getElementById('stat-galaxies').textContent = configPanel.superclusterConfig.galaxyCount;
+
+            const avgSystems = (configPanel.superclusterConfig.systemsPerGalaxy.min +
+                               configPanel.superclusterConfig.systemsPerGalaxy.max) / 2;
+            const avgBodies = (configPanel.superclusterConfig.bodiesPerSystem.min +
+                              configPanel.superclusterConfig.bodiesPerSystem.max) / 2;
+
+            document.getElementById('stat-systems').textContent =
+                `~${Math.round(configPanel.superclusterConfig.galaxyCount * avgSystems)}`;
+            document.getElementById('stat-bodies').textContent =
+                `~${Math.round(configPanel.superclusterConfig.galaxyCount * avgSystems * avgBodies)}`;
+        }
+
+        updateQuickStats();
+        log('Server Config Panel initialized', 'success');
+
+        // Preview tab switching
+        window.switchPreviewTab = function(tab) {
+            document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            document.getElementById('hierarchy-view').style.display = tab === 'hierarchy' ? 'block' : 'none';
+            document.getElementById('json-view').style.display = tab === 'json' ? 'block' : 'none';
+            document.getElementById('stats-view').style.display = tab === 'stats' ? 'block' : 'none';
+        };
+
+        // Generate full universe preview using WorldDataManager
+        window.generateFullPreview = async function() {
+            log('Starting full universe generation (with persistence check)...', 'info');
+
+            const progressContainer = document.getElementById('generation-progress');
+            const progressBar = document.getElementById('progress-bar');
+            progressContainer.style.display = 'block';
+
+            const hierarchyView = document.getElementById('hierarchy-view');
+            const jsonView = document.getElementById('json-view');
+            const statsView = document.getElementById('stats-view');
+
+            // Clear previous content
+            hierarchyView.innerHTML = '';
+            jsonView.innerHTML = '';
+            statsView.innerHTML = '';
+
+            const generatedData = {
+                masterSeed: configPanel.masterSeed,
+                config: configPanel.serialize(),
+                galaxies: []
+            };
+
+            const stats = {
+                totalGalaxies: 0,
+                totalSystems: 0,
+                totalBodies: 0,
+                bodyTypes: {},
+                starTypes: {},
+                loadedFromStorage: 0,
+                newlyGenerated: 0
+            };
+
+            const galaxyCount = configPanel.superclusterConfig.galaxyCount;
+
+            // Generate galaxies (limit to first 3 for preview performance)
+            const previewGalaxyCount = Math.min(galaxyCount, 3);
+
+            // Reset WorldDataManager stats
+            worldDataManager.resetStats();
+
+            for (let g = 0; g < previewGalaxyCount; g++) {
+                const progress = ((g + 1) / previewGalaxyCount) * 100;
+                progressBar.style.width = `${progress}%`;
+                progressBar.textContent = `${Math.round(progress)}%`;
+
+                // Check if galaxy exists, get or generate
+                const galaxyExisted = await worldDataManager.galaxyExists(g);
+                const galaxyData = await worldDataManager.getGalaxy(g);
+
+                const statusBadge = galaxyExisted
+                    ? '<span style="color: #00FF00; font-size: 9px;">[LOADED]</span>'
+                    : '<span style="color: #FFD700; font-size: 9px;">[NEW]</span>';
+
+                if (galaxyExisted) {
+                    stats.loadedFromStorage++;
+                    log(`Galaxy ${g} loaded from storage`, 'info');
+                } else {
+                    stats.newlyGenerated++;
+                    log(`Galaxy ${g} generated and saved`, 'success');
+                }
+
+                // Create galaxy node in hierarchy view
+                const galaxyNode = document.createElement('div');
+                galaxyNode.className = 'galaxy-node';
+                galaxyNode.innerHTML = `
+                    <div class="galaxy-name">${galaxyData.name} ${statusBadge}</div>
+                    <div style="color: #666; font-size: 10px;">Seed: ${galaxyData.seed} | Systems: ${galaxyData.systemCount}</div>
+                `;
+                hierarchyView.appendChild(galaxyNode);
+
+                // Limit systems for preview
+                const systemCount = Math.min(galaxyData.systemCount, 5);
+
+                for (let s = 0; s < systemCount; s++) {
+                    // Check if system exists, get or generate
+                    const systemExisted = await worldDataManager.systemExists(g, s);
+                    const systemConfig = await worldDataManager.getSystem(g, s);
+
+                    const sysStatusBadge = systemExisted
+                        ? '<span style="color: #00FF00;">[L]</span>'
+                        : '<span style="color: #FFD700;">[N]</span>';
+
+                    if (systemExisted) {
+                        stats.loadedFromStorage++;
+                    } else {
+                        stats.newlyGenerated++;
+                    }
+
+                    galaxyData.systems = galaxyData.systems || [];
+                    galaxyData.systems.push(systemConfig);
+
+                    stats.totalSystems++;
+                    stats.starTypes[systemConfig.starType.type] =
+                        (stats.starTypes[systemConfig.starType.type] || 0) + 1;
+
+                    // Create system node
+                    const systemNode = document.createElement('div');
+                    systemNode.className = 'system-node';
+                    systemNode.innerHTML = `
+                        <div class="system-name">System ${g}-${s} (${systemConfig.starType.type} star) ${sysStatusBadge}</div>
+                        <div style="color: #666; font-size: 9px;">
+                            Capture Radius: ${Math.round(systemConfig.captureRadius)} | Bodies: ${systemConfig.bodies.length}
+                        </div>
+                    `;
+
+                    // Add bodies
+                    for (let b = 0; b < systemConfig.bodies.length; b++) {
+                        const body = systemConfig.bodies[b];
+                        stats.totalBodies++;
+                        stats.bodyTypes[body.bodyType] = (stats.bodyTypes[body.bodyType] || 0) + 1;
+
+                        const bodyNode = document.createElement('div');
+                        bodyNode.className = 'body-node';
+
+                        const color = getBodyTypeColor(body.bodyType);
+                        const sizeDisplay = body.bodyType === 'ringworld'
+                            ? `${Math.round(body.size.majorRadius)}x${Math.round(body.size.minorRadius)}`
+                            : `r=${Math.round(body.size.radius)}`;
+
+                        bodyNode.innerHTML = `
+                            <div class="body-icon" style="background: ${color}; border-color: ${color};"></div>
+                            <div class="body-info">
+                                <div class="body-type" style="color: ${color};">${body.bodyType}</div>
+                                <div class="body-details">
+                                    ${sizeDisplay} | Orbit: ${Math.round(body.orbital.radius)} | Seed: ${body.seed}
+                                </div>
+                            </div>
+                        `;
+                        systemNode.appendChild(bodyNode);
+                    }
+
+                    galaxyNode.appendChild(systemNode);
+                }
+
+                generatedData.galaxies.push(galaxyData);
+                stats.totalGalaxies++;
+
+                // Yield to prevent UI freeze
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+
+            // Show note about preview limitation
+            if (galaxyCount > previewGalaxyCount) {
+                const noteNode = document.createElement('div');
+                noteNode.style.cssText = 'color: #FFD700; padding: 15px; text-align: center; font-size: 11px;';
+                noteNode.textContent = `Showing ${previewGalaxyCount} of ${galaxyCount} galaxies for preview performance. Full generation will create all ${galaxyCount} galaxies.`;
+                hierarchyView.appendChild(noteNode);
+            }
+
+            // Update JSON view
+            jsonView.innerHTML = `<div class="json-output">${JSON.stringify(generatedData, null, 2)}</div>`;
+
+            // Update stats view
+            let bodyTypeStats = '';
+            for (const [type, count] of Object.entries(stats.bodyTypes)) {
+                bodyTypeStats += `
+                    <div class="stat-row">
+                        <span class="stat-label" style="color: ${getBodyTypeColor(type)};">${type}</span>
+                        <span class="stat-value">${count} (${Math.round(count / stats.totalBodies * 100)}%)</span>
+                    </div>
+                `;
+            }
+
+            let starTypeStats = '';
+            for (const [type, count] of Object.entries(stats.starTypes)) {
+                starTypeStats += `
+                    <div class="stat-row">
+                        <span class="stat-label">${type}</span>
+                        <span class="stat-value">${count}</span>
+                    </div>
+                `;
+            }
+
+            // Get WorldDataManager statistics
+            const wdmStats = worldDataManager.getStats();
+
+            statsView.innerHTML = `
+                <div class="stats-panel" style="margin: 0;">
+                    <div class="stats-title">Generation Statistics</div>
+                    <div class="stat-row">
+                        <span class="stat-label">Galaxies:</span>
+                        <span class="stat-value">${stats.totalGalaxies}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Systems:</span>
+                        <span class="stat-value">${stats.totalSystems}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Bodies:</span>
+                        <span class="stat-value">${stats.totalBodies}</span>
+                    </div>
+                </div>
+
+                <div class="stats-panel" style="margin-top: 15px;">
+                    <div class="stats-title">Storage Statistics</div>
+                    <div class="stat-row">
+                        <span class="stat-label">Loaded from Storage:</span>
+                        <span class="stat-value" style="color: #00FF00;">${stats.loadedFromStorage}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Newly Generated:</span>
+                        <span class="stat-value" style="color: #FFD700;">${stats.newlyGenerated}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Cache Hit Rate:</span>
+                        <span class="stat-value">${(wdmStats.hitRate * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Cache Size:</span>
+                        <span class="stat-value">G:${wdmStats.cacheSize.galaxies} S:${wdmStats.cacheSize.systems} B:${wdmStats.cacheSize.bodies}</span>
+                    </div>
+                </div>
+
+                <div class="stats-panel" style="margin-top: 15px;">
+                    <div class="stats-title">Body Type Distribution</div>
+                    ${bodyTypeStats}
+                </div>
+
+                <div class="stats-panel" style="margin-top: 15px;">
+                    <div class="stats-title">Star Type Distribution</div>
+                    ${starTypeStats}
+                </div>
+            `;
+
+            progressContainer.style.display = 'none';
+            log(`Generation complete: ${stats.totalGalaxies} galaxies, ${stats.totalSystems} systems, ${stats.totalBodies} bodies`, 'success');
+
+            // Store generated data for export
+            window.generatedData = generatedData;
+        };
+
+        function getBodyTypeColor(type) {
+            const colors = {
+                terrestrial: '#3d8b3d',
+                gasGiant: '#DEB887',
+                ringworld: '#FFD700',
+                icePlanet: '#87CEEB',
+                lavaPlanet: '#FF4500',
+                barren: '#808080'
+            };
+            return colors[type] || '#888888';
+        }
+
+        // Save/Load from localStorage
+        window.saveToLocalStorage = function() {
+            try {
+                const config = configPanel.serialize();
+                localStorage.setItem('polymir_server_config', JSON.stringify(config));
+                log('Configuration saved to localStorage', 'success');
+            } catch (err) {
+                log('Failed to save: ' + err.message, 'error');
+            }
+        };
+
+        window.loadFromLocalStorage = function() {
+            try {
+                const data = localStorage.getItem('polymir_server_config');
+                if (data) {
+                    const config = JSON.parse(data);
+                    const newPanel = ServerConfigPanel.deserialize(config);
+
+                    // Copy properties to existing panel
+                    configPanel.masterSeed = newPanel.masterSeed;
+                    configPanel.superclusterConfig = newPanel.superclusterConfig;
+                    configPanel.generationZones = newPanel.generationZones;
+                    configPanel.bodyDefaults = newPanel.bodyDefaults;
+                    configPanel.collisionSettings = newPanel.collisionSettings;
+                    configPanel.biomeConfig = newPanel.biomeConfig;
+
+                    configPanel.build();
+                    updateQuickStats();
+
+                    log('Configuration loaded from localStorage', 'success');
+                } else {
+                    log('No saved configuration found', 'warning');
+                }
+            } catch (err) {
+                log('Failed to load: ' + err.message, 'error');
+            }
+        };
+
+        // Clear all world data
+        window.clearWorldData = async function() {
+            if (!confirm('Clear ALL generated world data? This cannot be undone.')) return;
+
+            try {
+                await worldDataManager.clearAllData();
+                log('All world data cleared', 'warning');
+
+                // Clear preview
+                document.getElementById('hierarchy-view').innerHTML = `
+                    <div style="color: #666; text-align: center; padding: 50px;">
+                        World data cleared. Click "Generate Full Preview" to generate new data.
+                    </div>
+                `;
+
+                updateQuickStats();
+            } catch (err) {
+                log('Failed to clear data: ' + err.message, 'error');
+            }
+        };
+
+        // Auto-load saved config if available
+        const savedConfig = localStorage.getItem('polymir_server_config');
+        if (savedConfig) {
+            log('Found saved configuration', 'info');
+        }
+
+        // Check for existing world data
+        (async () => {
+            const galaxyExists = await worldDataManager.galaxyExists(0);
+            if (galaxyExists) {
+                log('Existing world data found in storage', 'info');
+            } else {
+                log('No existing world data - will generate on first preview', 'info');
+            }
+        })();
+
+        log('Test page ready', 'success');
+    </script>
+</body>
+</html>

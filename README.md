@@ -1,15 +1,15 @@
 # POLYMIR - Scale-Invariant Voxel Universe Engine
 
-**Version:** 1.0.0-alpha
-**Status:** Architecture Complete, Implementation In Progress
+**Version:** 1.1.0-alpha
+**Status:** Core Systems Implemented, Backend Infrastructure Complete
 **License:** AGPL-3.0 (Copyleft - Free commercial use if derivative work is open-source & also Copyleft)
-**Target:** GitHub Pages + Cloudflare Workers
+**Target:** GitHub Pages + Node.js Backend with PostgreSQL
 
 ---
 
 ## Project Vision
 
-A WebGPU-based voxel universe engine featuring:
+A WebGL-based voxel universe engine featuring:
 - **Scale-invariant fractal architecture** - Same data format from nano to macro scale (16:1 ratio)
 - **Emergent orbital mechanics** - Day/night cycles from actual planetary rotation
 - **Parallel asynchronous chunk loading** - 3 simultaneous loaders with priority queue (93% draw call reduction)
@@ -1097,42 +1097,46 @@ See LICENSE file for full details.
 
 ---
 
-**Last Updated:** 2025-01-16
-**Architecture Version:** 2.1.0 (Layered Planet Generation & Fracturing)
-**Implementation Status:** Generation Architecture Planning Complete
+**Last Updated:** 2025-11-11
+**Architecture Version:** 2.2.0 (Multiplayer Backend & Avatar System)
+**Implementation Status:** Core Engine + Backend Infrastructure Complete
+
+### Version 2.2.0 Changes (2025-11-11)
+- **NEW**: Voxel Avatar System
+  - VRM-compatible rigging with bone region mapping
+  - Cube and smooth rendering modes with LOD
+  - Expression and look-at controllers
+  - Full editor with templates, history, and preview
+  - Multiplayer avatar sync with impostor optimization
+- **NEW**: Complete Backend Infrastructure
+  - Node.js server with PostgreSQL database
+  - JWT authentication and CORS middleware
+  - WebSocket handlers for real-time multiplayer
+  - Player position, chat, ship, and damage systems
+  - Trust-based validation consensus system
+  - IPFS and libp2p integration for decentralized storage
+  - Megachunk coordinate system for seamless world transfer
+- **NEW**: Ringworld Generation
+  - Toroidal world generation with biome support
+  - Layered chunk generation system
+- **NEW**: Portal System
+  - Voxel-based portals with affine transform rendering
+  - Portal linking and management
+- **NEW**: Multiplayer Systems
+  - Damage map synchronization
+  - Build detection and validation
+  - Ship systems with physics
+  - Chat with filtering and logging
 
 ### Version 2.1.0 Changes (2025-01-16)
-- ✨ **NEW**: Layered Planet Generation System (Phase 0.5)
-  - Core layer architecture (bright core → medium core → stone mantle)
-  - Distance-based shell generation (sphere/torus/plane agnostic)
-  - Water post-processing (fill empty voxels below water level)
-  - Surface chunk classification for load prioritization
-- ✨ **NEW**: Planet Fracturing System
-  - Voronoi-based fracture patterns (3-5 fragments for simple splits)
-  - Deterministic shattering with pre-computed patterns
-  - Fragment metadata tracking (generation depth, parent lineage)
-  - Boundary chunk preloading on collision detection
-- ✨ **NEW**: Multiple Planet Types
-  - Voxel planets (full chunk generation with core layers)
-  - Gas giants (impostor-only, zero voxels, no shattering)
-  - Planet type detection and routing system
-- ✨ **NEW**: .mvox Format Extensions
-  - Fracture tracking metadata (originalObjectFilename, hasShattered, shatterGeneration)
-  - Object type discrimination (voxel_planet vs gas_giant)
-  - Core layer configuration storage
-  - Terrain bounds and water level properties
+- Layered Planet Generation System (Phase 0.5)
+- Planet Fracturing System with Voronoi patterns
+- Multiple Planet Types (voxel planets, gas giants)
+- .mvox Format Extensions for fracture tracking
 
 ### Version 2.0.0 Changes (2025-01-15)
-- ✨ **NEW**: Parallel Asynchronous Chunk Loading System (3 loaders with priority queue)
-- ✨ **NEW**: 4×4×4 Chunk Batching with Material Separation (93% draw call reduction)
-- ✨ **NEW**: Dynamic Impostor Culling (10-15% GPU savings)
-- ✨ **NEW**: Hierarchical Spatial Structure (Supercluster → Galaxy → System → Planet)
-- ✨ **NEW**: System Capture Zone with Lighting Transitions
-- ✨ **NEW**: Surface Chunk Detection at Generation Time
-- 📈 **PLANNED**: 3D Greedy Meshing (30-50% additional reduction)
-- 📈 **PLANNED**: Indexed Geometry (33% vertex buffer reduction)
-- 📈 **PLANNED**: Batch-Relative Coordinates (eliminates precision jitter)
-- 📈 **PLANNED**: Web Worker Async Meshing (non-blocking)
-#   p o l y m i r 
- 
- 
+- Parallel Asynchronous Chunk Loading System
+- 4x4x4 Chunk Batching with Material Separation
+- Dynamic Impostor Culling
+- Hierarchical Spatial Structure
+- System Capture Zone with Lighting Transitions

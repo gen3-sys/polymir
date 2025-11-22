@@ -81,6 +81,7 @@ export function createConnectionHandler(centralLibraryDB, worldServerDB) {
 
             // Update client info
             clientInfo.playerId = playerId;
+            clientInfo.username = player.username;
             clientInfo.isAuthenticated = true;
 
             // Register player connection
@@ -153,9 +154,10 @@ export function createConnectionHandler(centralLibraryDB, worldServerDB) {
 /**
  * Create disconnect handler
  * @param {Object} worldServerDB - World Server database adapter
+ * @param {Object} playerStateManager - Optional real-time state manager
  * @returns {Function} Handler function
  */
-export function createDisconnectHandler(worldServerDB) {
+export function createDisconnectHandler(worldServerDB, playerStateManager = null) {
     /**
      * Handle 'disconnect' message (graceful disconnect)
      * @param {string} connectionId
@@ -173,7 +175,12 @@ export function createDisconnectHandler(worldServerDB) {
 
         if (playerId) {
             try {
-                // Mark player offline
+                // Remove from real-time state manager
+                if (playerStateManager) {
+                    playerStateManager.removePlayer(playerId);
+                }
+
+                // Mark player offline in DB
                 await worldServerDB.markPlayerOffline(playerId);
 
                 log.info('Player disconnected gracefully', {
@@ -229,10 +236,11 @@ export function createPingHandler() {
  * @param {Object} wsServer - WebSocket server instance
  * @param {Object} centralLibraryDB
  * @param {Object} worldServerDB
+ * @param {Object} playerStateManager - Optional real-time state manager
  */
-export function registerConnectionHandlers(wsServer, centralLibraryDB, worldServerDB) {
+export function registerConnectionHandlers(wsServer, centralLibraryDB, worldServerDB, playerStateManager = null) {
     wsServer.registerHandler('authenticate', createConnectionHandler(centralLibraryDB, worldServerDB));
-    wsServer.registerHandler('disconnect', createDisconnectHandler(worldServerDB));
+    wsServer.registerHandler('disconnect', createDisconnectHandler(worldServerDB, playerStateManager));
     wsServer.registerHandler('ping', createPingHandler());
 
     log.info('Connection handlers registered');

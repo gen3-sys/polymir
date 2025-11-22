@@ -511,3 +511,60 @@ export function normalize(x, y, z) {
         z: z / length
     };
 }
+
+// =============================================
+// ADDITIONAL UTILITIES FOR TESTS/COMPATIBILITY
+// =============================================
+
+/**
+ * Convert world position to local coordinates within megachunk
+ * @param {Object} position - {x, y, z}
+ * @returns {{x: number, y: number, z: number}}
+ */
+export function worldToLocal(position) {
+    return {
+        x: ((position.x % MEGACHUNK_SIZE) + MEGACHUNK_SIZE) % MEGACHUNK_SIZE,
+        y: ((position.y % MEGACHUNK_SIZE) + MEGACHUNK_SIZE) % MEGACHUNK_SIZE,
+        z: ((position.z % MEGACHUNK_SIZE) + MEGACHUNK_SIZE) % MEGACHUNK_SIZE
+    };
+}
+
+/**
+ * Convert megachunk + local coordinates to world coordinates
+ * @param {Object} megachunk - {x, y, z}
+ * @param {Object} local - {x, y, z}
+ * @returns {{x: number, y: number, z: number}}
+ */
+export function localToWorld(megachunk, local) {
+    return {
+        x: megachunk.x * MEGACHUNK_SIZE + local.x,
+        y: megachunk.y * MEGACHUNK_SIZE + local.y,
+        z: megachunk.z * MEGACHUNK_SIZE + local.z
+    };
+}
+
+/**
+ * Get all 26 neighboring megachunks around a center megachunk
+ * @param {Object} center - {x, y, z}
+ * @returns {Array<{x: number, y: number, z: number}>}
+ */
+export function getNeighborMegachunks(center) {
+    const neighbors = [];
+
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            for (let dz = -1; dz <= 1; dz++) {
+                // Skip center itself
+                if (dx === 0 && dy === 0 && dz === 0) continue;
+
+                neighbors.push({
+                    x: center.x + dx,
+                    y: center.y + dy,
+                    z: center.z + dz
+                });
+            }
+        }
+    }
+
+    return neighbors;
+}

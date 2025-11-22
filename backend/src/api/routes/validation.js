@@ -6,8 +6,8 @@
  */
 
 import express from 'express';
-import { logger } from '../../utils/logger.js';
-import { calculateValidatorRequirement } from '../../utils/trust.js';
+import logger from '../../utils/logger.js';
+import { getValidatorsRequired } from '../../utils/trust.js';
 
 const router = express.Router();
 
@@ -75,7 +75,7 @@ export function createValidationRoutes(centralLibraryDB, ipfsClient, authMiddlew
             log.debug('Event data uploaded to IPFS', { eventDataCid, eventType });
 
             // Calculate required validators based on trust score
-            const validatorsRequired = calculateValidatorRequirement(req.player.trust_score);
+            const validatorsRequired = getValidatorsRequired(req.player.trust_score);
 
             // Create consensus result
             const consensus = await centralLibraryDB.createConsensusResult({
@@ -192,7 +192,7 @@ export function createValidationRoutes(centralLibraryDB, ipfsClient, authMiddlew
             const totalVotes = votes.length;
 
             // Check if consensus reached (simple majority for now)
-            const requiredValidators = calculateValidatorRequirement(
+            const requiredValidators = getValidatorsRequired(
                 consensus.submitter_id === '00000000-0000-0000-0000-000000000000' ? 1.0 : 0.5
             );
 

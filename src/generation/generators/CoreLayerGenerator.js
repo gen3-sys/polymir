@@ -11,12 +11,50 @@
  * - Early exit with break
  */
 export class CoreLayerGenerator {
-    constructor(coreLayers, gravitationalShape) {
-        this.coreLayers = coreLayers;
-        this.gravity = gravitationalShape;
+    /**
+     * @param {Array|GravitationalShapeConfig} coreLayersOrGravity - Either layers array or gravity shape
+     * @param {GravitationalShapeConfig} [gravitationalShape] - Gravity shape (if first arg is layers)
+     */
+    constructor(coreLayersOrGravity, gravitationalShape) {
+        // Handle flexible constructor arguments
+        if (gravitationalShape) {
+            // Old API: (coreLayers, gravityShape)
+            this.coreLayers = coreLayersOrGravity;
+            this.gravity = gravitationalShape;
+        } else if (coreLayersOrGravity && coreLayersOrGravity.layers) {
+            // New API: just (gravityShape) - extract layers from it
+            this.gravity = coreLayersOrGravity;
+            this.coreLayers = this.convertGravityLayers(coreLayersOrGravity.layers);
+        } else if (Array.isArray(coreLayersOrGravity)) {
+            // Just layers, no gravity shape
+            this.coreLayers = coreLayersOrGravity;
+            this.gravity = null;
+        } else {
+            this.coreLayers = [];
+            this.gravity = coreLayersOrGravity || null;
+        }
 
         // Pre-sort layers by minRadius for faster lookup
-        this.sortedLayers = [...coreLayers].sort((a, b) => a.minRadius - b.minRadius);
+        this.sortedLayers = this.coreLayers.length > 0
+            ? [...this.coreLayers].sort((a, b) => (a.minRadius || 0) - (b.minRadius || 0))
+            : [];
+    }
+
+    /**
+     * Convert GravitationalShapeConfig layers format to CoreLayerGenerator format
+     */
+    convertGravityLayers(gravityLayers) {
+        if (!gravityLayers || !Array.isArray(gravityLayers)) return [];
+
+        const maxRadius = this.gravity?.getMaxRadius?.() || 100;
+
+        return gravityLayers.map(layer => ({
+            name: layer.name,
+            minRadius: layer.depthRange[0] * maxRadius,
+            maxRadius: layer.depthRange[1] * maxRadius,
+            voxelType: typeof layer.voxelType === 'number' ? layer.voxelType : 1,
+            solid: layer.solid !== false
+        }));
     }
 
     /**

@@ -6,7 +6,7 @@
  */
 
 import bcrypt from 'bcrypt';
-import { logger } from '../../utils/logger.js';
+import logger from '../../utils/logger.js';
 
 // =============================================
 // AUTHENTICATION HELPERS

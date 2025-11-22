@@ -38,7 +38,17 @@ export class Chunk {
         return this.voxels.has(Chunk.encodeKey(x, y, z));
     }
 
-    buildMesh(neighborLookup) {
+    hasVoxels() {
+        return this.voxels.size > 0;
+    }
+
+    /**
+     * Build mesh geometry for this chunk
+     * @param {Function} neighborLookup - Function to check voxels in neighboring chunks
+     * @param {Object} options - Optional settings
+     * @param {number} options.maxQuadSize - Max quad size for greedy meshing (use smaller for curved surfaces)
+     */
+    buildMesh(neighborLookup, options = {}) {
         if (!this.dirty) return this.mesh;
 
         if (this.mesh) {
@@ -74,7 +84,11 @@ export class Chunk {
             return null;
         }
 
-        const mergedQuads = GreedyMesher.meshFaces(exposedFaces);
+        const mesherOptions = {};
+        if (options.maxQuadSize) {
+            mesherOptions.maxQuadSize = options.maxQuadSize;
+        }
+        const mergedQuads = GreedyMesher.meshFaces(exposedFaces, mesherOptions);
 
         const geometryData = MeshBuilder.buildGeometryGreedy(
             mergedQuads,

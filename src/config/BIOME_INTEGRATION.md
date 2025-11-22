@@ -232,3 +232,4 @@ console.log(biome); // e.g., "desert"
 - Player-created custom biomes
 - Import/export biome presets
 - Network sync for multiplayer
+

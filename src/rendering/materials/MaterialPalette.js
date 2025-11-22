@@ -1,5 +1,5 @@
-import { voxelTypeRegistry } from '../data/voxel/VoxelTypes.js';
-import { BiomeSystem } from './BiomeSystem.js';
+import { voxelTypeRegistry } from '../../data/voxel/VoxelTypes.js';
+import { BiomeSystem } from '../../systems/biome/BiomeSystem.js';
 
 export class MaterialPalette {
     constructor(config = {}) {

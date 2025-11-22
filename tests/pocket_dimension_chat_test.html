@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket Dimension Chat Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(180deg, #0a0a0a 0%, #1a0a2e 100%);
+            color: #00ff00;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #viewport {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        canvas {
+            flex: 1;
+            display: block;
+        }
+
+        #chat-panel {
+            width: 350px;
+            background: rgba(0, 0, 0, 0.95);
+            border-left: 2px solid #0f0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #chat-header {
+            padding: 15px;
+            background: rgba(0, 255, 0, 0.1);
+            border-bottom: 2px solid #0f0;
+        }
+
+        #chat-header h2 {
+            color: #0ff;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .connection-info {
+            font-size: 11px;
+            margin: 3px 0;
+        }
+
+        .connection-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .connection-status.connected {
+            background: #0f0;
+            box-shadow: 0 0 5px #0f0;
+        }
+
+        .connection-status.disconnected {
+            background: #f00;
+        }
+
+        .connection-status.connecting {
+            background: #ff0;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .message {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border-left: 3px solid;
+            font-size: 12px;
+            animation: slideIn 0.2s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .message.system {
+            background: rgba(0, 170, 255, 0.1);
+            border-left-color: #0af;
+            color: #0af;
+        }
+
+        .message.chat {
+            background: rgba(0, 255, 0, 0.1);
+            border-left-color: #0f0;
+        }
+
+        .message.position {
+            background: rgba(255, 255, 0, 0.1);
+            border-left-color: #ff0;
+            color: #ff0;
+            font-size: 10px;
+        }
+
+        .message.error {
+            background: rgba(255, 0, 0, 0.1);
+            border-left-color: #f00;
+            color: #f00;
+        }
+
+        .message .username {
+            color: #0ff;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .message .timestamp {
+            color: #666;
+            font-size: 10px;
+            margin-right: 8px;
+        }
+
+        .message .content {
+            color: #0f0;
+        }
+
+        #chat-input-area {
+            padding: 15px;
+            border-top: 2px solid #0f0;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        #username-input {
+            width: 100%;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #0f0;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        #username-input:focus {
+            outline: none;
+            border-color: #0ff;
+            box-shadow: 0 0 5px #0ff;
+        }
+
+        #chat-input {
+            width: 100%;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #0f0;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: none;
+        }
+
+        #chat-input:focus {
+            outline: none;
+            border-color: #0ff;
+            box-shadow: 0 0 5px #0ff;
+        }
+
+        #chat-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            flex: 1;
+            padding: 8px;
+            background: #0f0;
+            color: #000;
+            border: none;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #0ff;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 255, 255, 0.5);
+        }
+
+        button:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        #info-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid #0f0;
+            padding: 15px;
+            font-size: 11px;
+            max-width: 300px;
+        }
+
+        .info-title {
+            color: #0ff;
+            font-size: 14px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .info-item {
+            margin: 5px 0;
+        }
+
+        .info-label {
+            color: #0f0;
+            display: inline-block;
+            width: 120px;
+        }
+
+        .info-value {
+            color: #ff0;
+            font-weight: bold;
+        }
+
+        #players-list {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #0f0;
+        }
+
+        .player-item {
+            margin: 3px 0;
+            color: #0ff;
+            font-size: 10px;
+        }
+
+        #controls-info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid #0f0;
+            padding: 10px;
+            font-size: 10px;
+        }
+
+        .control-line {
+            margin: 2px 0;
+        }
+
+        .key {
+            color: #ff0;
+            font-weight: bold;
+        }
+
+        #chat-messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #chat-messages::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        #chat-messages::-webkit-scrollbar-thumb {
+            background: #0f0;
+            border-radius: 4px;
+        }
+
+        #chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #0ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="viewport">
+            <canvas id="canvas"></canvas>
+
+            <div id="info-overlay">
+                <div class="info-title">📦 Pocket Dimension</div>
+                <div class="info-item">
+                    <span class="info-label">Position:</span>
+                    <span class="info-value" id="pos-display">0, 0, 0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Velocity:</span>
+                    <span class="info-value" id="vel-display">0.0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Players Online:</span>
+                    <span class="info-value" id="player-count">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">FPS:</span>
+                    <span class="info-value" id="fps-display">60</span>
+                </div>
+                <div id="players-list"></div>
+            </div>
+
+            <div id="controls-info">
+                <strong style="color: #0ff;">Controls:</strong><br>
+                <div class="control-line"><span class="key">WASD</span> - Move</div>
+                <div class="control-line"><span class="key">Space</span> - Jump</div>
+                <div class="control-line"><span class="key">Shift</span> - Sprint</div>
+                <div class="control-line"><span class="key">Mouse</span> - Look</div>
+                <div class="control-line"><span class="key">T</span> - Focus Chat</div>
+            </div>
+        </div>
+
+        <div id="chat-panel">
+            <div id="chat-header">
+                <h2>💬 Dimension Chat</h2>
+                <div class="connection-info">
+                    <span class="connection-status" id="conn-status"></span>
+                    <span id="conn-text">Disconnected</span>
+                </div>
+                <div class="connection-info" style="color: #666; font-size: 10px;">
+                    Server: <span id="server-url">localhost:3000</span>
+                </div>
+            </div>
+
+            <div id="chat-messages">
+                <div class="message system">
+                    <span class="content">Welcome to the Pocket Dimension! This is an infinite voxel space for testing multiplayer chat.</span>
+                </div>
+            </div>
+
+            <div id="chat-input-area">
+                <input
+                    type="text"
+                    id="username-input"
+                    placeholder="Enter username..."
+                    maxlength="20"
+                />
+                <textarea
+                    id="chat-input"
+                    placeholder="Type a message... (Press Enter to send)"
+                    rows="3"
+                    disabled
+                ></textarea>
+                <div class="button-group">
+                    <button id="connect-btn">Connect</button>
+                    <button id="send-btn" disabled>Send</button>
+                    <button id="disconnect-btn" disabled>Disconnect</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        /**
+         * POCKET DIMENSION CHAT TEST
+         *
+         * Tests:
+         * - Infinite voxel pocket dimension (simple flat plane)
+         * - WebSocket chat with multiple players
+         * - Real-time position broadcasting
+         * - Player visualization with nameplates
+         * - Message history
+         */
+
+        import * as THREE from 'three';
+        import { WebSocketAdapter } from '../src/io/network/WebSocketAdapter.js';
+        import { HTTPAdapter } from '../src/io/network/HTTPAdapter.js';
+
+        // ===================================================================
+        // CONFIGURATION
+        // ===================================================================
+        const SERVER_URL = 'http://localhost:3000';
+        const WS_URL = 'ws://localhost:3000';
+        document.getElementById('server-url').textContent = SERVER_URL.replace('http://', '');
+
+        // ===================================================================
+        // CHAT SYSTEM
+        // ===================================================================
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const usernameInput = document.getElementById('username-input');
+        const sendBtn = document.getElementById('send-btn');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+
+        let httpAdapter = null;
+        let wsAdapter = null;
+        let currentPlayer = null;
+        let connectedPlayers = new Map();
+
+        function addMessage(content, type = 'system', username = null) {
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            let html = `<span class="timestamp">${timestamp}</span>`;
+
+            if (username) {
+                html += `<span class="username">${username}:</span>`;
+            }
+
+            html += `<span class="content">${content}</span>`;
+            msg.innerHTML = html;
+
+            chatMessages.appendChild(msg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function connect() {
+            const username = usernameInput.value.trim();
+            if (!username) {
+                addMessage('Please enter a username!', 'error');
+                return;
+            }
+
+            try {
+                addMessage('Connecting to server...', 'system');
+                document.getElementById('conn-status').className = 'connection-status connecting';
+                document.getElementById('conn-text').textContent = 'Connecting...';
+
+                // Initialize HTTP adapter
+                httpAdapter = new HTTPAdapter(SERVER_URL);
+
+                // Try to register/login
+                const password = 'pocket' + Math.random().toString(36).substr(2, 9);
+
+                try {
+                    const result = await httpAdapter.register(username, password);
+                    currentPlayer = result.player;
+                    currentPlayer.token = result.token;
+                    addMessage(`Registered as ${username}`, 'system');
+                } catch (e) {
+                    // Try login
+                    const result = await httpAdapter.login(username, password);
+                    currentPlayer = result.player;
+                    currentPlayer.token = result.token;
+                    addMessage(`Logged in as ${username}`, 'system');
+                }
+
+                // Connect WebSocket
+                wsAdapter = new WebSocketAdapter(WS_URL, currentPlayer.token);
+
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('Connection timeout')), 5000);
+
+                    wsAdapter.on('connected', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    });
+
+                    wsAdapter.on('error', (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+
+                    wsAdapter.connect();
+                });
+
+                // Setup event listeners
+                wsAdapter.on('chat', (data) => {
+                    addMessage(data.message, 'chat', data.username || 'Unknown');
+                });
+
+                wsAdapter.on('playerPosition', (data) => {
+                    if (data.playerId !== currentPlayer.id) {
+                        connectedPlayers.set(data.playerId, {
+                            username: data.username || 'Player',
+                            position: new THREE.Vector3(
+                                data.position.x,
+                                data.position.y,
+                                data.position.z
+                            ),
+                            lastUpdate: Date.now()
+                        });
+                        updatePlayersList();
+                        createOrUpdatePlayerMarker(data.playerId, data.position, data.username);
+                    }
+                });
+
+                wsAdapter.on('playerConnected', (data) => {
+                    addMessage(`${data.username || 'Someone'} joined the dimension`, 'system');
+                });
+
+                wsAdapter.on('playerDisconnected', (data) => {
+                    addMessage(`${data.username || 'Someone'} left the dimension`, 'system');
+                    connectedPlayers.delete(data.playerId);
+                    removePlayerMarker(data.playerId);
+                    updatePlayersList();
+                });
+
+                // Success!
+                document.getElementById('conn-status').className = 'connection-status connected';
+                document.getElementById('conn-text').textContent = 'Connected';
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                usernameInput.disabled = true;
+
+                addMessage('Connected! You can now chat with other players.', 'system');
+
+            } catch (error) {
+                addMessage(`Connection failed: ${error.message}`, 'error');
+                document.getElementById('conn-status').className = 'connection-status disconnected';
+                document.getElementById('conn-text').textContent = 'Failed';
+                console.error(error);
+            }
+        }
+
+        function disconnect() {
+            if (wsAdapter) {
+                wsAdapter.disconnect();
+            }
+            httpAdapter = null;
+            wsAdapter = null;
+            currentPlayer = null;
+            connectedPlayers.clear();
+            clearPlayerMarkers();
+
+            document.getElementById('conn-status').className = 'connection-status disconnected';
+            document.getElementById('conn-text').textContent = 'Disconnected';
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            usernameInput.disabled = false;
+
+            addMessage('Disconnected from server', 'system');
+            updatePlayersList();
+        }
+
+        function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message || !wsAdapter) return;
+
+            // Send via custom event (you'll need to add this to WebSocketAdapter)
+            wsAdapter.send({
+                type: 'chat',
+                message: message
+            });
+
+            // Show own message
+            addMessage(message, 'chat', currentPlayer.username);
+            chatInput.value = '';
+        }
+
+        function updatePlayersList() {
+            const playersList = document.getElementById('players-list');
+            playersList.innerHTML = '<strong style="color: #0ff;">Players Nearby:</strong><br>';
+
+            if (connectedPlayers.size === 0) {
+                playersList.innerHTML += '<div class="player-item" style="color: #666;">No other players</div>';
+            } else {
+                for (const [id, player] of connectedPlayers) {
+                    const distance = camera.position.distanceTo(player.position);
+                    playersList.innerHTML +=
+                        `<div class="player-item">${player.username} (${distance.toFixed(1)}m)</div>`;
+                }
+            }
+
+            document.getElementById('player-count').textContent = connectedPlayers.size + 1;
+        }
+
+        // Button handlers
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        sendBtn.addEventListener('click', sendMessage);
+
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        usernameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                connect();
+            }
+        });
+
+        // Focus chat with T key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 't' && document.activeElement !== chatInput) {
+                e.preventDefault();
+                chatInput.focus();
+            }
+        });
+
+        // ===================================================================
+        // THREE.JS SCENE SETUP
+        // ===================================================================
+        const canvas = document.getElementById('canvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0520);
+        scene.fog = new THREE.Fog(0x0a0520, 50, 200);
+
+        const camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 500);
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        renderer.shadowMap.enabled = true;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0x00ff00, 1, 100);
+        pointLight.position.set(0, 20, 0);
+        scene.add(pointLight);
+
+        // Create infinite grid floor
+        const gridHelper = new THREE.GridHelper(200, 200, 0x00ff00, 0x003300);
+        gridHelper.position.y = 0;
+        scene.add(gridHelper);
+
+        // Create some voxel blocks for reference
+        const voxelGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const voxelMaterial = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+
+        for (let i = 0; i < 20; i++) {
+            const voxel = new THREE.Mesh(voxelGeometry, voxelMaterial);
+            voxel.position.set(
+                Math.random() * 40 - 20,
+                0.5,
+                Math.random() * 40 - 20
+            );
+            scene.add(voxel);
+        }
+
+        // ===================================================================
+        // PLAYER SYSTEM
+        // ===================================================================
+        camera.position.set(0, 5, 10);
+        const velocity = new THREE.Vector3();
+        const moveSpeed = 10;
+        const sprintMultiplier = 2;
+        const jumpForce = 10;
+        let grounded = true;
+
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            if (document.activeElement !== chatInput && document.activeElement !== usernameInput) {
+                keys[e.key.toLowerCase()] = true;
+            }
+        });
+        document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+        // Mouse look
+        let mouseX = 0;
+        let mouseY = 0;
+        let isPointerLocked = false;
+
+        canvas.addEventListener('click', () => {
+            if (!isPointerLocked) {
+                canvas.requestPointerLock();
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            isPointerLocked = document.pointerLockElement === canvas;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isPointerLocked) {
+                mouseX -= e.movementX * 0.002;
+                mouseY -= e.movementY * 0.002;
+                mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY));
+            }
+        });
+
+        // ===================================================================
+        // PLAYER MARKERS
+        // ===================================================================
+        const playerMarkers = new Map();
+
+        function createOrUpdatePlayerMarker(playerId, position, username) {
+            let marker = playerMarkers.get(playerId);
+
+            if (!marker) {
+                // Create new marker
+                const geometry = new THREE.BoxGeometry(0.8, 1.8, 0.8);
+                const material = new THREE.MeshLambertMaterial({ color: 0x00ffff });
+                marker = new THREE.Mesh(geometry, material);
+
+                // Add nameplate
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, 256, 64);
+                ctx.fillStyle = '#00ffff';
+                ctx.font = 'bold 32px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText(username || 'Player', 128, 42);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.position.y = 2;
+                sprite.scale.set(2, 0.5, 1);
+                marker.add(sprite);
+
+                scene.add(marker);
+                playerMarkers.set(playerId, marker);
+            }
+
+            marker.position.set(position.x, position.y, position.z);
+        }
+
+        function removePlayerMarker(playerId) {
+            const marker = playerMarkers.get(playerId);
+            if (marker) {
+                scene.remove(marker);
+                playerMarkers.delete(playerId);
+            }
+        }
+
+        function clearPlayerMarkers() {
+            for (const marker of playerMarkers.values()) {
+                scene.remove(marker);
+            }
+            playerMarkers.clear();
+        }
+
+        // ===================================================================
+        // GAME LOOP
+        // ===================================================================
+        let lastTime = performance.now();
+        let lastPositionSync = 0;
+        let frameCount = 0;
+        let fpsTime = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const currentTime = performance.now();
+            const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
+            lastTime = currentTime;
+
+            // FPS counter
+            frameCount++;
+            fpsTime += deltaTime;
+            if (fpsTime >= 1) {
+                document.getElementById('fps-display').textContent = frameCount;
+                frameCount = 0;
+                fpsTime = 0;
+            }
+
+            // Camera rotation
+            camera.rotation.order = 'YXZ';
+            camera.rotation.y = mouseX;
+            camera.rotation.x = mouseY;
+
+            // Movement
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            forward.y = 0;
+            forward.normalize();
+
+            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+
+            const speed = keys['shift'] ? moveSpeed * sprintMultiplier : moveSpeed;
+
+            if (keys['w']) velocity.add(forward.multiplyScalar(speed * deltaTime));
+            if (keys['s']) velocity.add(forward.multiplyScalar(-speed * deltaTime));
+            if (keys['a']) velocity.add(right.multiplyScalar(-speed * deltaTime));
+            if (keys['d']) velocity.add(right.multiplyScalar(speed * deltaTime));
+            if (keys[' '] && grounded) {
+                velocity.y = jumpForce;
+                grounded = false;
+            }
+
+            // Gravity
+            velocity.y -= 20 * deltaTime;
+
+            // Update position
+            camera.position.add(velocity.clone().multiplyScalar(deltaTime));
+
+            // Ground collision
+            if (camera.position.y < 1.6) {
+                camera.position.y = 1.6;
+                velocity.y = 0;
+                grounded = true;
+            }
+
+            // Damping
+            velocity.x *= 0.9;
+            velocity.z *= 0.9;
+
+            // Update UI
+            document.getElementById('pos-display').textContent =
+                `${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}`;
+            document.getElementById('vel-display').textContent = velocity.length().toFixed(2);
+
+            // Sync position to server
+            if (wsAdapter && currentPlayer && currentTime - lastPositionSync > 100) {
+                wsAdapter.sendPosition({
+                    x: camera.position.x,
+                    y: camera.position.y,
+                    z: camera.position.z
+                });
+                lastPositionSync = currentTime;
+            }
+
+            // Update players list periodically
+            if (currentTime - lastPositionSync > 1000) {
+                updatePlayersList();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = canvas.clientWidth / canvas.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+        });
+
+        addMessage('Pocket Dimension initialized. Enter a username and connect to chat!', 'system');
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,9 @@
+
+    // =============================================
+    // JWT AUTHENTICATION
+    // =============================================
+    jwt: {
+        secret: getOptional('JWT_SECRET', 'polymir-dev-secret-change-in-production'),
+        expiresIn: getOptional('JWT_EXPIRES_IN', '7d'), // 7 days default
+        algorithm: 'HS256'
+    },

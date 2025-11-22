@@ -7,7 +7,15 @@ export class GreedyMesher {
         return (x & 0xFF) | ((y & 0xFF) << 8) | ((z & 0xFF) << 16);
     }
 
-    static meshFaces(exposedFaces) {
+    /**
+     * Mesh exposed faces into merged quads using greedy meshing.
+     * @param {Array} exposedFaces - Array of exposed face objects
+     * @param {Object} options - Optional settings
+     * @param {number} options.maxQuadSize - Max width/height of quads (default: Infinity)
+     *                                       Use smaller values for curved surfaces to reduce interpolation error
+     */
+    static meshFaces(exposedFaces, options = {}) {
+        const maxQuadSize = options.maxQuadSize || Infinity;
         const mergedQuads = [];
 
         const facesByDir = {
@@ -61,7 +69,8 @@ export class GreedyMesher {
                 }
 
                 // OPTIMIZED: Expand width using O(1) Map lookup instead of O(n) find
-                while (true) {
+                // Limit by maxQuadSize for curved surface rendering
+                while (width < maxQuadSize) {
                     const nextX = face.x + (axis1 === 'x' ? width : 0);
                     const nextY = face.y + (axis1 === 'y' ? width : axis2 === 'y' ? 0 : 0);
                     const nextZ = face.z + (axis1 === 'z' ? width : 0);
@@ -75,7 +84,8 @@ export class GreedyMesher {
                 }
 
                 // OPTIMIZED: Expand height using O(1) Map lookup instead of O(n) find
-                outerLoop: while (true) {
+                // Limit by maxQuadSize for curved surface rendering
+                outerLoop: while (height < maxQuadSize) {
                     for (let i = 0; i < width; i++) {
                         const testX = face.x + (axis1 === 'x' ? i : axis2 === 'x' ? height : 0);
                         const testY = face.y + (axis1 === 'y' ? i : axis2 === 'y' ? height : 0);

@@ -111,6 +111,23 @@ export class CentralLibraryDB {
     }
 
     /**
+     * Update player password/passphrase
+     * @param {string} playerId
+     * @param {string} passwordHash - Hashed password, or null to remove protection
+     * @returns {Promise<void>}
+     */
+    async updatePlayerPassword(playerId, passwordHash) {
+        const query = `
+            UPDATE players
+            SET password_hash = $1
+            WHERE player_id = $2
+        `;
+
+        await this.pool.query(query, [passwordHash, playerId]);
+        this.log.debug('Player password updated', { playerId });
+    }
+
+    /**
      * Get trust leaderboard
      * @param {number} limit
      * @returns {Promise<Array>}

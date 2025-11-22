@@ -1,10 +1,79 @@
+import { HTTPAdapter } from '../../io/network/HTTPAdapter.js';
+import { IndexedDBAdapter } from '../../io/storage/IndexedDBAdapter.js';
+
 export class PlotSystem {
-    constructor(factionManager) {
+    constructor(factionManager, config = {}) {
         this.factionManager = factionManager;
         this.plots = new Map();
         this.playerPlots = new Map();
         this.minSpacing = 10;
         this.plotExpansionStep = 5;
+
+        // Network and storage adapters
+        this.httpAdapter = new HTTPAdapter({
+            baseUrl: config.backendUrl || 'http://localhost:3000',
+            playerId: config.playerId || null
+        });
+        this.storageAdapter = new IndexedDBAdapter({
+            dbName: 'polymir',
+            storeName: 'plots'
+        });
+
+        this.initializeAdapters();
+    }
+
+    /**
+     * Initialize storage adapter
+     */
+    async initializeAdapters() {
+        try {
+            await this.storageAdapter.initialize();
+            await this.loadPersistedPlots();
+            console.log('[PlotSystem] Storage initialized');
+        } catch (error) {
+            console.error('[PlotSystem] Storage initialization failed:', error);
+        }
+    }
+
+    /**
+     * Load persisted plots from storage
+     */
+    async loadPersistedPlots() {
+        try {
+            if (!this.storageAdapter.isInitialized) return;
+
+            const plotsData = await this.storageAdapter.get('plots');
+            if (plotsData) {
+                this.plots = new Map(plotsData.plots);
+                this.playerPlots = new Map(
+                    plotsData.playerPlots.map(([playerId, plotIds]) => [playerId, new Set(plotIds)])
+                );
+                console.log(`[PlotSystem] Loaded ${this.plots.size} plots from storage`);
+            }
+        } catch (error) {
+            console.error('[PlotSystem] Failed to load persisted plots:', error);
+        }
+    }
+
+    /**
+     * Save plots to storage
+     */
+    async savePlots() {
+        try {
+            if (!this.storageAdapter.isInitialized) return;
+
+            const plotsData = {
+                plots: Array.from(this.plots.entries()),
+                playerPlots: Array.from(this.playerPlots.entries()).map(([playerId, plotIds]) => [
+                    playerId,
+                    Array.from(plotIds)
+                ])
+            };
+
+            await this.storageAdapter.set('plots', plotsData, { type: 'plots' });
+        } catch (error) {
+            console.error('[PlotSystem] Failed to save plots:', error);
+        }
     }
 
     createPlot(playerId, position, factionId = null) {
@@ -30,6 +99,9 @@ export class PlotSystem {
             this.playerPlots.set(playerId, new Set());
         }
         this.playerPlots.get(playerId).add(plotId);
+
+        // Persist to storage
+        this.savePlots();
 
         return plotId;
     }
@@ -178,6 +250,9 @@ export class PlotSystem {
 
         plot.lastExpanded = Date.now();
 
+        // Persist to storage
+        this.savePlots();
+
         return true;
     }
 
@@ -198,6 +273,9 @@ export class PlotSystem {
         }
 
         this.plots.delete(plotId);
+
+        // Persist to storage
+        this.savePlots();
         return true;
     }
 

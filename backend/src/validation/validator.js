@@ -5,11 +5,12 @@
  * Manages the full validation lifecycle from request to trust adjustment
  */
 
-import { logger } from '../utils/logger.js';
+import logger from '../utils/logger.js';
 import {
-    calculateValidatorRequirement,
+    getValidatorsRequired,
     selectValidators,
-    calculateTrustAdjustment
+    calculateValidatorAdjustment,
+    calculateSubmitterAdjustment
 } from '../utils/trust.js';
 
 const log = logger.child('Validator');
@@ -56,7 +57,7 @@ export class ValidationOrchestrator {
             }
 
             // Calculate required validators
-            const validatorsRequired = calculateValidatorRequirement(submitter.trust_score);
+            const validatorsRequired = getValidatorsRequired(submitter.trust_score);
 
             log.info('Validation requested', {
                 submitterId,
